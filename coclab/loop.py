@@ -127,7 +127,7 @@ class _Session:
             logger.info("Template %s unreadable (%s); skipped", template, exc)
             return vision.Match(False, 0, 0, 0.0)
 
-    def _handle_disconnected(self, shot: Path) -> bool:
+    def _handle_afk_reload(self, shot: Path) -> bool:
         """'Anyone there? RELOAD GAME' popup: tap RELOAD and wait for the game to return."""
         try:
             boxes = self.deps.ocr_boxes(self._img(shot))
@@ -155,6 +155,43 @@ class _Session:
             self.deps.sleep(25)
             return True
         return False
+
+    def _handle_popups(self, shot: Path) -> bool:
+        """Tangani popup lintas layar: AFK reload, Another_device, Client_error, Connection_lost."""
+        if self._handle_afk_reload(shot):
+            return True
+        if self._popup_match(shot, "simplicity/ui/Another_device.png"):
+            logger.warning(
+                "Another device: akun aktif di perangkat lain - menunggu %ds (tanpa tap)",
+                self.cfg.another_device_wait_s,
+            )
+            waited = 0
+            while waited < self.cfg.another_device_wait_s and not self.deps.should_stop():
+                step = min(1.0, self.cfg.another_device_wait_s - waited)
+                self.deps.sleep(step)
+                waited += step
+            return True
+        if self._popup_match(shot, "simplicity/ui/Client_error!.png"):
+            logger.warning("Client_error terdeteksi - restart CoC")
+            try:
+                self.deps.adb.shell(self.device, f"am force-stop {self.cfg.coc_package}")
+            except Exception as exc:  # noqa: BLE001
+                logger.info("force-stop gagal: %s", exc)
+            self._launch_coc()
+            return True
+        if self._popup_match(shot, "simplicity/ui/Connection_lost.png"):
+            point = self.cfg.connection_lost_point or [0.5, 0.5]
+            self.actions.tap_percent(*point)
+            logger.warning("Connection lost - tap reconnect di %s", point)
+            self.deps.sleep(10)
+            return True
+        return False
+
+    def _popup_match(self, shot: Path, template: str) -> bool:
+        try:
+            return self._match_safe(shot, template).found
+        except ValueError:
+            return False
 
     def _coc_running(self) -> bool:
         """True bila aplikasi CoC terlihat di daftar proses device."""
@@ -553,7 +590,7 @@ class _Session:
             shot = self._capture("screen.png")
             if shot is None:
                 return StepResult(False, "attack screen capture failed")
-            if self._handle_disconnected(shot):
+            if self._handle_popups(shot):
                 continue
             match = self._match(shot, "attack.png")
             if match.found:
@@ -588,7 +625,7 @@ class _Session:
             shot = self._capture("matchmaking.png")
             if shot is None:
                 return StepResult(False, "matchmaking capture failed")
-            if self._handle_disconnected(shot):
+            if self._handle_popups(shot):
                 continue
             if not clicked:
                 match = self._match(shot, "find_match.png")
@@ -897,7 +934,7 @@ class _Session:
                     return StepResult(False, "coc_restarted")
                 shot = self._capture("battle_end.png")
                 if shot is not None:
-                    if self._handle_disconnected(shot):
+                    if self._handle_popups(shot):
                         continue
                     if (
                         self._match_safe(shot, "returnhome.png").found
@@ -983,7 +1020,7 @@ class _Session:
                 self.actions.tap_percent(*self.cfg.return_home_point)
                 logger.info("Tap Return Home")
             else:
-                if self._handle_disconnected(shot):
+                if self._handle_popups(shot):
                     continue
                 self.actions.tap_percent(*self.cfg.star_bonus_point)
                 logger.info("Tap popup Okay (star bonus point)")

@@ -335,7 +335,7 @@ def test_disconnect_popup_taps_reload():
     session = _Session(load_config(EXAMPLE), "observe", deps)
     session.device = "127.0.0.1:5555"
     session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
-    assert session._handle_disconnected(None) is True
+    assert session._handle_popups(None) is True
     assert (280, 407) in adb.taps
 
 def test_no_disconnect_returns_false():
@@ -347,8 +347,98 @@ def test_no_disconnect_returns_false():
     session = _Session(load_config(EXAMPLE), "observe", deps)
     session.device = "127.0.0.1:5555"
     session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
-    assert session._handle_disconnected(None) is False
+    assert session._handle_popups(None) is False
     assert adb.taps == []
+
+
+def test_another_device_waits_during_battle_without_tap():
+    """Popup muncul SAAT battle-wait (setelah STATE ATTACK) → tidak tap, tunggu, lanjut."""
+    from coclab.vision import Match
+    script = full_script()
+    seen = {"n": 0}
+    states = []
+    deps, adb = make_deps(script, states)
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Another_device.png":
+            if "ATTACK" in states:          # hanya muncul saat battle-wait
+                seen["n"] += 1
+                return Match(seen["n"] <= 2, 500, 400, 0.99)
+            return Match(False, 0, 0, 0.0)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    sleeps = []
+    base_sleep = deps.sleep
+    deps.sleep = lambda s: sleeps.append(s) or base_sleep(s)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and seen["n"] >= 3
+    assert not any(abs(tx - 500) <= 3 and abs(ty - 400) <= 3 for tx, ty in adb.taps)
+    assert sleeps.count(1.0) >= 2  # menunggu dalam potongan 1 detik
+
+
+def test_another_device_stop_is_responsive():
+    from coclab.vision import Match
+    deps, adb = make_deps(full_script(), [])
+    base_ft = deps.find_template
+    state = {"stops": 0}
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Another_device.png":
+            return Match(True, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    deps.should_stop = lambda: state.__setitem__("stops", state["stops"] + 1) or state["stops"] > 2
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "stopped" in summary.reason.lower()
+
+
+def test_client_error_restarts_coc():
+    from coclab.vision import Match
+    script = full_script(**{"Client_error!.png": Match(True, 500, 400, 0.99)})
+    seen = {"n": 0}
+    deps, adb = make_deps(script, [])
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Client_error!.png":
+            seen["n"] += 1
+            return Match(seen["n"] <= 1, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert any("am start" in c for c in adb.shells)
+
+
+def test_connection_lost_taps_reconnect_point(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["connection_lost_point"] = [0.5, 0.55]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    from coclab.vision import Match
+    script = full_script(**{"Connection_lost.png": Match(True, 500, 400, 0.99)})
+    seen = {"n": 0}
+    deps, adb = make_deps(script, [])
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Connection_lost.png":
+            seen["n"] += 1
+            return Match(seen["n"] <= 1, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and (800, 495) in adb.taps
 
 
 def test_find_attack_retries_until_button_appears():
