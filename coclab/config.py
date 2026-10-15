@@ -54,6 +54,8 @@ class Config:
     hero_cards: list[list[float]]
     extra_troop_card: list[float] | None
     continue_point: list[float]
+    rage_card: list[float] | None
+    freeze_card: list[float] | None
     army: dict[str, int]
     wall_upgrade: WallUpgradeConfig
 
@@ -196,6 +198,11 @@ def load_config(path: str | Path) -> Config:
 
     continue_point = _point(data.get("continue_point", [0.49, 0.78]), "continue_point")
 
+    rage_raw = data.get("rage_card")
+    rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
+    freeze_raw = data.get("freeze_card")
+    freeze_card = None if freeze_raw is None else _point(freeze_raw, "freeze_card")
+
     army_raw = data.get("army", {})
     if not isinstance(army_raw, dict):
         raise ConfigError("army: expected an object of troop counts")
@@ -228,6 +235,8 @@ def load_config(path: str | Path) -> Config:
         hero_cards=hero_cards,
         extra_troop_card=extra_troop_card,
         continue_point=continue_point,
+        rage_card=rage_card,
+        freeze_card=freeze_card,
         army=army,
         wall_upgrade=wall_upgrade,
     )

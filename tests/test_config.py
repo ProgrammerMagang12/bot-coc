@@ -136,12 +136,16 @@ def test_example_config_deploy_and_event_fields():
     cfg = load_config(EXAMPLE)
     assert cfg.hero_cards == [[0.424, 0.91], [0.502, 0.91]]
     assert cfg.extra_troop_card == [0.24, 0.933]
+    assert cfg.rage_card == [0.58, 0.933]
+    assert cfg.freeze_card == [0.658, 0.933]
     assert cfg.continue_point == [0.49, 0.78]
     assert cfg.army == {
         "dragon_drops": 13,
-        "balloon_drops": 16,
+        "balloon_drops": 18,
         "wall_wrecker_drop": 1,
-        "extra_troop": 3,
+        "extra_troop": 2,
+        "rage_spell": 4,
+        "freeze_spell": 3,
     }
 
 

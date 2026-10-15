@@ -309,6 +309,20 @@ class _Session:
                     card_point=self.cfg.extra_troop_card,
                 )
             self._drop_heroes(chosen)
+            if self.cfg.rage_card is not None:
+                self._drop_group(
+                    "rage_spell",
+                    chosen.rage_spell_positions,
+                    count=army.get("rage_spell"),
+                    card_point=self.cfg.rage_card,
+                )
+            if self.cfg.freeze_card is not None:
+                self._drop_group(
+                    "freeze_spell",
+                    chosen.freeze_spell_positions,
+                    count=army.get("freeze_spell"),
+                    card_point=self.cfg.freeze_card,
+                )
         else:
             logger.info("No strategies loaded; legacy single drop")
             self.actions.tap_percent(*self.cfg.drop_card_point)

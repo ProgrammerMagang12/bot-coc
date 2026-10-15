@@ -230,14 +230,13 @@ def test_multi_drop_attack_taps_cards_then_points():
     assert dragon[0] == (int(0.30 * 1600), int(0.60 * 900))
     assert dragon[1] == (int(0.32 * 1600), int(0.62 * 900))
     assert body[16] == (int(0.166 * 1600), int(0.933 * 900))
-    assert body[17:33] == [(int(0.34 * 1600), int(0.64 * 900))] * 16
-    assert body[33] == (int(0.24 * 1600), int(0.933 * 900))
-    assert body[34:37] == [
+    assert body[17:35] == [(int(0.34 * 1600), int(0.64 * 900))] * 18
+    assert body[35] == (int(0.24 * 1600), int(0.933 * 900))
+    assert body[36:38] == [
         (int(0.30 * 1600), int(0.60 * 900)),
         (int(0.32 * 1600), int(0.62 * 900)),
-        (int(0.30 * 1600), int(0.60 * 900)),
     ]
-    assert body[37:] == [
+    assert body[38:] == [
         (int(0.065 * 1600), int(0.75 * 900)),
         (int(0.614 * 1600), int(0.648 * 900)),
         (int(0.497 * 1600), int(0.849 * 900)),
@@ -298,6 +297,36 @@ def test_heroes_deployed_at_scenario_positions():
     assert adb.taps.index(hero1_card) < adb.taps.index(pos1)
     assert adb.taps.index(pos1) < adb.taps.index(hero2_card)
     assert adb.taps.index(hero2_card) < adb.taps.index(pos2)
+
+
+def test_spells_cast_at_scenario_positions():
+    from coclab.strategy import Strategy
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="S",
+            dragon_drops=[[0.50, 0.50]],
+            balloon_drops=[[0.51, 0.51]],
+            wall_wrecker_drop=None,
+            rage_spell_positions=[[0.40, 0.40], [0.45, 0.45]],
+            freeze_spell_positions=[[0.60, 0.60]],
+        )
+    ]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    rage_card = (int(0.58 * 1600), int(0.933 * 900))
+    freeze_card = (int(0.658 * 1600), int(0.933 * 900))
+    rage_a = (int(0.40 * 1600), int(0.40 * 900))
+    rage_b = (int(0.45 * 1600), int(0.45 * 900))
+    freeze_pt = (int(0.60 * 1600), int(0.60 * 900))
+    assert rage_card in adb.taps and freeze_card in adb.taps
+    assert adb.taps.count(rage_a) == 2 and adb.taps.count(rage_b) == 2
+    assert adb.taps.count(freeze_pt) == 3
+    assert adb.taps.index(rage_card) < adb.taps.index(rage_a)
+    assert adb.taps.index(freeze_card) < adb.taps.index(freeze_pt)
+    assert adb.taps.index(rage_a) < adb.taps.index(freeze_card)
 
 
 def test_return_home_event_claim_flow():
