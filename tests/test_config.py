@@ -154,6 +154,7 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.de_roi == [0.880, 0.168, 0.960, 0.212]
     assert cfg.de_full_value == 0
     assert cfg.coc_package == "com.supercell.clashofclans"
+    assert cfg.collect_points == []
     assert cfg.army == {
         "dragon_drops": 13,
         "balloon_drops": 18,

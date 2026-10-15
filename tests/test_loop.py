@@ -427,6 +427,24 @@ def test_army_empty_stops_attack():
     assert end_battle in adb.taps  # langsung end battle, tidak deploy
 
 
+def test_collect_points_tapped_at_home(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["collect_points"] = [[0.2, 0.5], [0.3, 0.5]]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok
+    p1 = (int(0.2 * 1600), int(0.5 * 900))
+    p2 = (int(0.3 * 1600), int(0.5 * 900))
+    # ditap sekali saat mulai (sebelum Click Attack) + sekali setelah balik home
+    assert adb.taps.count(p1) == 2 and adb.taps.count(p2) == 2
+    assert adb.taps.index(p1) < adb.taps.index((1, 1))  # collect sebelum serang
+
+
 def test_army_counts_cycle_strategy_points(tmp_path):
     import json
 

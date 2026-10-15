@@ -208,6 +208,17 @@ class _Session:
         crop = self.deps.crop_percent(self._img(shot), *self.cfg.de_roi)
         return self.deps.read_de(crop)
 
+    def _collect_resources(self) -> None:
+        """Ketuk titik kolektor (mine/pump/drill) yang sudah dikalibrasi — tap = collect."""
+        if not self.cfg.collect_points:
+            return
+        logger.info("Collect resource (%d titik)", len(self.cfg.collect_points))
+        for xp, yp in self.cfg.collect_points:
+            if self.deps.should_stop():
+                return
+            self.actions.tap_percent(xp, yp)
+            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+
     def _de_full(self) -> bool:
         """Stop condition: dark elixir storage at capacity → stop + close CoC."""
         if self.cfg.de_full_value <= 0:
@@ -653,11 +664,12 @@ class _Session:
     def run_cycle(self) -> StepResult:
         if self.deps.should_stop():
             return StepResult(False, "stopped by user")
-        if self._de_full():
-            return StepResult(False, "de_full")
         result = self.find_attack()
         if not result.ok:
             return result
+        self._collect_resources()
+        if self._de_full():
+            return StepResult(False, "de_full")
         self.actions.tap_px(result.data["px"], result.data["py"])
         logger.info("Click Attack")
         self.deps.sleep(1.0)
@@ -685,8 +697,10 @@ class _Session:
         result = self.return_home()
         if result.ok and self.cfg.wall_upgrade.enabled:
             self._run_wall_upgrade()
-        if result.ok and self._de_full():
-            return StepResult(False, "de_full")
+        if result.ok:
+            self._collect_resources()
+            if self._de_full():
+                return StepResult(False, "de_full")
         return result
 
 

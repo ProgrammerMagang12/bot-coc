@@ -71,6 +71,7 @@ class Config:
     de_full_value: int
     army_badge_roi: list[float]
     coc_package: str
+    collect_points: list[list[float]]
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -271,6 +272,12 @@ def load_config(path: str | Path) -> Config:
     coc_package = _nonempty_str(
         data.get("coc_package", "com.supercell.clashofclans"), "coc_package"
     )
+    collect_raw = data.get("collect_points", [])
+    if not isinstance(collect_raw, list):
+        raise ConfigError("collect_points: expected a list of [x, y] pairs")
+    collect_points = [
+        _point(pair, f"collect_points[{i}]") for i, pair in enumerate(collect_raw)
+    ]
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -326,6 +333,7 @@ def load_config(path: str | Path) -> Config:
         de_full_value=de_full_value,
         army_badge_roi=army_badge_roi,
         coc_package=coc_package,
+        collect_points=collect_points,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,
