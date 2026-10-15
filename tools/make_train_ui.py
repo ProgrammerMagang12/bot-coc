@@ -21,7 +21,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 STEPS: list[tuple[str, str]] = [
-    ("army_button", "Di HOME: KLIK tombol Army / latih pasukan (untuk buka panel My Army)"),
+    (
+        "army_button",
+        "Buka layar ATTACK di game (tap Battle di kiri-bawah, TANPA Find Match) sampai bar "
+        "pasukan terlihat, lalu KLIK area DECK / bar pasukan di bagian bawah",
+    ),
     ("clear_troops", "Di panel: KLIK ikon tempat sampah (clear) bagian PASUKAN  (N = tidak ada)"),
     ("clear_confirm", "KLIK tombol konfirmasi (Remove/OK) kalau muncul  (N = tidak ada)"),
     ("clear_spells", "KLIK ikon clear bagian SPELL  (N = tidak ada)"),

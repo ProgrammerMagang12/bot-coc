@@ -293,6 +293,32 @@ class _Session:
         self.deps.sleep(2)
         return StepResult(False, "army_mismatch")
 
+    def _recover_army(self, gate: StepResult) -> StepResult:
+        """Perbaiki deck langsung dari layar scout: Deck Builder presisi atau recipe."""
+        ui_ready = bool(self.cfg.train_ui and "army_button" in self.cfg.train_ui)
+        has_clear = (
+            any(
+                self.cfg.train_ui.get(key) is not None
+                for key in ("clear_troops", "clear_spells", "clear_siege")
+            )
+            if ui_ready
+            else False
+        )
+        rounds = 2 if has_clear else 1
+        for _ in range(rounds):
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
+            if ui_ready and self._build_army():
+                gate = self._army_gate()
+                if gate.ok:
+                    logger.info("Deck presisi siap - lanjut serang")
+                    return gate
+                continue
+            if self.cfg.train_points and self._train_army():
+                return self._army_gate()
+            return gate
+        return gate
+
     def _build_army(self) -> bool:
         """Deck Builder presisi: clear semua -> bangun sesuai GUI (tap=+1) -> tutup."""
         ui = self.cfg.train_ui
@@ -780,22 +806,9 @@ class _Session:
                 return result
             gate = self._army_gate()
             if not gate.ok:
-                has_clear = any(
-                    self.cfg.train_ui.get(key) is not None
-                    for key in ("clear_troops", "clear_spells", "clear_siege")
-                )
-                max_build = 2 if has_clear else 1
-                if train_attempts < max_build and self._build_army():
-                    logger.info("Deck dibangun ulang (presisi) - ulang siklus")
-                    return self.run_cycle(train_attempts + 1)
-                if (
-                    train_attempts < max_build
-                    and self.cfg.train_points
-                    and self._train_army()
-                ):
-                    logger.info("Pasukan dilatih ulang (recipe) - ulang siklus")
-                    return self.run_cycle(train_attempts + 1)
-                return gate
+                gate = self._recover_army(gate)
+                if not gate.ok:
+                    return gate
             result = self.evaluate_loot()
             if result.ok:
                 break
