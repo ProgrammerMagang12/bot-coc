@@ -799,3 +799,49 @@ def test_wall_upgrade_not_called_when_disabled(monkeypatch):
     deps, _ = make_deps(full_script(), [])
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and calls["n"] == 0
+
+
+def test_attack_uses_detected_card_positions(monkeypatch):
+    """Kartu hasil deteksi template dipakai untuk deploy (bukan koordinat lama)."""
+    from coclab import loop as loop_mod
+    from coclab.strategy import Strategy
+
+    detected = {
+        "dragon": (170, 815, 0.90),
+        "balloon": (291, 815, 0.90),
+        "rage": (1180, 815, 0.90),
+        "freeze": (1301, 815, 0.90),
+        "hero_bk": (803, 815, 0.90),
+        "hero_warden": (924, 815, 0.90),
+        "hero_rc": (682, 815, 0.90),
+        "hero_duke": (1050, 815, 0.90),
+        "siege_blimp": (547, 815, 0.90),
+    }
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards", lambda img, tpl_dir, **kw: dict(detected)
+    )
+    strategy = Strategy(
+        name="test",
+        dragon_drops=[[0.5, 0.5]],
+        balloon_drops=[[0.55, 0.5]],
+        wall_wrecker_drop=[0.3, 0.55],
+        hero_positions=[[0.6, 0.5]],
+        rage_spell_positions=[[0.7, 0.5]],
+        freeze_spell_positions=[[0.8, 0.5]],
+    )
+    deps, adb = make_deps(full_script(), [])
+    deps.load_strategies = lambda path: [strategy]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+
+    def hit(x, y):
+        return any(abs(tx - x) <= 2 and abs(ty - y) <= 2 for tx, ty in adb.taps)
+
+    assert hit(170, 815)  # kartu dragon hasil deteksi
+    assert hit(291, 815)  # balloon
+    assert hit(547, 815)  # siege blimp
+    assert hit(924, 815)  # warden (tap pusat kartu, jauh dari badge panah)
+    assert hit(1050, 815)  # hero ke-4 (duke)
+    assert hit(1180, 815)  # rage
+    assert hit(1301, 815)  # freeze
+    assert hit(800, 450)  # titik drop strategi tetap dipakai
