@@ -67,6 +67,17 @@ def crop_percent(
     return img[py1:py2, px1:px2]
 
 
+def enhance_numeric_crop(img: np.ndarray, upscale: int = 4) -> np.ndarray:
+    """Binarize (Otsu) + invert + upscale — helps OCR read game-styled numbers."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    inverted = cv2.bitwise_not(binary)
+    big = cv2.resize(
+        inverted, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_LANCZOS4
+    )
+    return cv2.cvtColor(big, cv2.COLOR_GRAY2BGR)
+
+
 _engine_cache: list[Callable[[np.ndarray], str] | None] = []
 
 
@@ -96,6 +107,20 @@ def _load_default_engine() -> Callable[[np.ndarray], str] | None:
     return _engine_cache[0]
 
 
+def _looks_like_thousands_groups(tokens: list[str]) -> bool:
+    """True for '1 369 204' / '1369 204' — one number split by thousands separators."""
+    if not all(token.isdigit() for token in tokens):
+        return False
+    if len(tokens) > 4:
+        return False
+    if not 1 <= len(tokens[0]) <= 4:
+        return False
+    rest = tokens[1:]
+    if not rest or len(rest[-1]) != 3:
+        return False
+    return all(len(token) == 3 for token in rest)
+
+
 def ocr_digits(
     img: np.ndarray | None, engine: Callable[[np.ndarray | None], str] | None = None
 ) -> int | None:
@@ -117,8 +142,7 @@ def ocr_digits(
         return None
     if len(numeric_tokens) == 1:
         digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
-    elif all(token.isdigit() and len(token) <= 3 for token in numeric_tokens):
-        # "1 369 204" — one number written with space-separated thousands
+    elif _looks_like_thousands_groups(numeric_tokens):
         digits = "".join(numeric_tokens)
     else:
         logger.info(

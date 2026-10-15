@@ -116,3 +116,22 @@ def test_ocr_digits_single_number_with_label_prefix():
 
 def test_ocr_digits_space_separated_thousands_are_one_number():
     assert ocr_digits(None, engine=lambda _i: "1 369 204") == 1369204
+
+
+def test_ocr_digits_partial_merge_of_thousands_groups():
+    assert ocr_digits(None, engine=lambda _i: "1369 204") == 1369204
+
+
+def test_ocr_digits_two_plain_numbers_still_rejected():
+    assert ocr_digits(None, engine=lambda _i: "1250 3400") is None
+
+
+def test_enhance_numeric_crop_upscales_and_binarizes():
+    from coclab.vision import enhance_numeric_crop
+
+    img = np.zeros((20, 60, 3), np.uint8)
+    img[5:15, 10:50] = 255  # blok putih: 1/3 area background setelah invert → 2/3
+    out = enhance_numeric_crop(img, upscale=4)
+    assert out.shape == (80, 240, 3)
+    bright = (out.mean(axis=2) > 127).mean()
+    assert abs(bright - 2 / 3) < 0.02  # struktur biner terjaga pasca-upscale

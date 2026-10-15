@@ -172,7 +172,7 @@ class _Session:
         if shot is None:
             return StepResult(False, "loot capture failed")
         crop = self.deps.crop_percent(self._img(shot), *self.cfg.loot_roi)
-        value = self.deps.ocr_digits(crop)
+        value = self.deps.ocr_digits(vision.enhance_numeric_crop(crop))
         if value is None:
             if self.cfg.on_ocr_fail == "stop":
                 return StepResult(False, "OCR unavailable (policy: stop)")
