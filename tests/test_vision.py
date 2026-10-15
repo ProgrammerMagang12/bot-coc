@@ -135,3 +135,17 @@ def test_enhance_numeric_crop_upscales_and_binarizes():
     assert out.shape == (80, 240, 3)
     bright = (out.mean(axis=2) > 127).mean()
     assert abs(bright - 2 / 3) < 0.02  # struktur biner terjaga pasca-upscale
+
+
+def test_ocr_text_boxes_passthrough():
+    from coclab.vision import ocr_text_boxes
+
+    engine = lambda _img: [("Upgrade", 10, 20), ("Wall", 30, 40)]
+    assert ocr_text_boxes(None, engine=engine) == [("Upgrade", 10, 20), ("Wall", 30, 40)]
+
+
+def test_ocr_text_joins_box_texts():
+    from coclab.vision import ocr_text
+
+    engine = lambda _img: [("Upgrade", 10, 20), ("Wall", 30, 40)]
+    assert ocr_text(None, engine=engine) == "Upgrade Wall"

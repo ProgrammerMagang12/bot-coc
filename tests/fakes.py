@@ -9,6 +9,7 @@ from coclab.vision import Match
 class RecordingAdb:
     def __init__(self):
         self.taps = []
+        self.swipes = []
         self.connected = None
 
     def connect(self, addr):
@@ -20,6 +21,9 @@ class RecordingAdb:
 
     def tap(self, d, x, y):
         self.taps.append((x, y))
+
+    def swipe(self, d, x1, y1, x2, y2):
+        self.swipes.append((x1, y1, x2, y2))
 
 
 class FakeActions:

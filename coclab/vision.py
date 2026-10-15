@@ -154,3 +154,57 @@ def ocr_digits(
     if not digits or len(digits) > _MAX_DIGITS:
         return None
     return int(digits)
+
+
+_boxes_engine_cache: list[Callable[[np.ndarray], list[tuple[str, int, int]]] | None] = []
+
+
+def _try_create_boxes_engine():
+    """Load rapidocr once; returns callable(img) -> [(text, cx, cy), ...] or None."""
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning("rapidocr-onnxruntime not installed; text OCR is disabled")
+        return None
+
+    ocr = RapidOCR()
+
+    def run(image: np.ndarray) -> list[tuple[str, int, int]]:
+        result, _elapsed = ocr(image)
+        boxes: list[tuple[str, int, int]] = []
+        if not result:
+            return boxes
+        for item in result:
+            points, text = item[0], str(item[1])
+            xs = [float(p[0]) for p in points]
+            ys = [float(p[1]) for p in points]
+            boxes.append((text, int(sum(xs) / len(xs)), int(sum(ys) / len(ys))))
+        return boxes
+
+    return run
+
+
+def _load_boxes_engine():
+    if not _boxes_engine_cache:
+        _boxes_engine_cache.append(_try_create_boxes_engine())
+    return _boxes_engine_cache[0]
+
+
+def ocr_text_boxes(
+    img: np.ndarray | None, engine=None
+) -> list[tuple[str, int, int]]:
+    """OCR text with box centers. Returns [] when the engine is unavailable."""
+    if engine is None:
+        engine = _load_boxes_engine()
+        if engine is None:
+            return []
+    try:
+        return list(engine(img) or [])
+    except Exception as exc:  # noqa: BLE001 - OCR failures must not crash the loop
+        logger.warning("text OCR failed: %s", exc)
+        return []
+
+
+def ocr_text(img: np.ndarray | None, engine=None) -> str:
+    """Joined OCR text; the optional engine has the same contract as ocr_text_boxes."""
+    return " ".join(text for text, _x, _y in ocr_text_boxes(img, engine))
