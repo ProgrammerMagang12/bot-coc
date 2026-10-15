@@ -647,7 +647,9 @@ class App:
                 cmd = [cfg.emulator_path, "launch", "--index", str(index)]
         log_queue.put((name, f"Emulator belum jalan — menjalankan: {' '.join(cmd)}"))
         try:
-            subprocess.Popen(cmd)  # noqa: S603 - path dari config user sendiri
+            subprocess.Popen(  # noqa: S603 - path dari config user sendiri
+                cmd, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
         except OSError as exc:
             log_queue.put((name, f"Gagal menjalankan emulator: {exc}"))
             return False

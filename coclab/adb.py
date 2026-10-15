@@ -18,7 +18,11 @@ class AdbError(Exception):
 
 
 def _default_runner(args: list[str]) -> tuple[int, bytes, str]:
-    completed = subprocess.run(args, capture_output=True)
+    completed = subprocess.run(
+        args,
+        capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     return completed.returncode, completed.stdout, completed.stderr.decode("utf-8", "replace")
 
 
