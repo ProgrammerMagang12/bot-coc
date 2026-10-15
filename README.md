@@ -41,5 +41,8 @@ Prototipe otomasi **original** (kode ditulis sendiri dari nol) untuk satu siklus
 - Deploy = **tap kartu** (bar kiri-bawah) → **tap titik di rumPUT**, per pasukan. Tap di atas bangunan = tooltip info (bukan deploy)!
   `tap_delay_ms` mengatur jeda antar-titik; pilihan pasukan TIDAK bertahan setelah battle (tap ulang tiap grup).
 - v2: serangan **multi-drop** dari `AttackStrategies.json` (buat dengan `py tools/make_strategy.py --image <scout.png> --name <nama>`); **wall upgrade** opsional via `wall_upgrade.enabled`
-  (default `false`; wajib kalibrasi `logo_up.png` + titik-titik dulu). Heroes/spells/skills = v2.2; zoom-out masih manual sebelum `--live`.
+  (default `false`; wajib kalibrasi `logo_up.png` + titik-titik dulu). Deploy penuh: `army` (jumlah tap per grup, siklus titik), `hero_cards`, `extra_troop_card`,
+  `rage_card`/`freeze_card` (cast di `*_spell_positions`). ⚠️ Posisi kartu hero/spell bergantung **susunan bar pasukan** — kalau jumlah kartu hero berubah
+  (mis. hero upgrade selesai/kembali), kalibrasi ulang 4 titik kartu (`hero_cards`, `rage_card`, `freeze_card`, `extra_troop_card`) dari screenshot battle baru.
+- Zoom-out masih manual sebelum `--live`.
 - Disclaimer lengkap ada di `docs/superpowers/specs/2026-10-15-coc-lab-v1-design.md`.
