@@ -83,6 +83,10 @@ def test_ocr_digits_no_digit_returns_none():
     assert ocr_digits(None, engine=lambda _i: "loot") is None
 
 
+def test_ocr_digits_tolerates_trailing_punctuation_groups():
+    assert ocr_digits(None, engine=lambda _i: "534 129.") == 534129
+
+
 def test_ocr_digits_real_engine_is_lazy_when_unavailable(monkeypatch):
     from coclab import vision
 

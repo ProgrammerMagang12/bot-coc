@@ -107,18 +107,35 @@ def _load_default_engine() -> Callable[[np.ndarray], str] | None:
     return _engine_cache[0]
 
 
-def _looks_like_thousands_groups(tokens: list[str]) -> bool:
-    """True for '1 369 204' / '1369 204' — one number split by thousands separators."""
-    if not all(token.isdigit() for token in tokens):
-        return False
-    if len(tokens) > 4:
-        return False
-    if not 1 <= len(tokens[0]) <= 4:
-        return False
-    rest = tokens[1:]
+_GROUP_TRIM = ".,:;'\"|()[]{}"
+
+
+def _digit_groups(tokens: list[str]) -> list[str] | None:
+    """Digit groups after trimming harmless punctuation; None when a token is not numeric."""
+    groups: list[str] = []
+    for token in tokens:
+        core = token.strip(_GROUP_TRIM)
+        if not core.isdigit():
+            return None
+        groups.append(core)
+    return groups
+
+
+def _looks_like_thousands_groups(tokens: list[str]) -> list[str] | None:
+    """Cleaned groups for '1 369 204' / '534 129.' style numbers; None otherwise."""
+    groups = _digit_groups(tokens)
+    if groups is None:
+        return None
+    if len(groups) > 4:
+        return None
+    if not 1 <= len(groups[0]) <= 4:
+        return None
+    rest = groups[1:]
     if not rest or len(rest[-1]) != 3:
-        return False
-    return all(len(token) == 3 for token in rest)
+        return None
+    if not all(len(group) == 3 for group in rest):
+        return None
+    return groups
 
 
 def ocr_digits(
@@ -142,15 +159,16 @@ def ocr_digits(
         return None
     if len(numeric_tokens) == 1:
         digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
-    elif _looks_like_thousands_groups(numeric_tokens):
-        digits = "".join(numeric_tokens)
     else:
-        logger.info(
-            "OCR: expected exactly one numeric field, found %d (raw=%r)",
-            len(numeric_tokens),
-            text,
-        )
-        return None
+        groups = _looks_like_thousands_groups(numeric_tokens)
+        if groups is None:
+            logger.info(
+                "OCR: expected exactly one numeric field, found %d (raw=%r)",
+                len(numeric_tokens),
+                text,
+            )
+            return None
+        digits = "".join(groups)
     if not digits or len(digits) > _MAX_DIGITS:
         return None
     return int(digits)

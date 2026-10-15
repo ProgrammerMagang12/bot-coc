@@ -1,0 +1,10 @@
+{
+  "strategies": [
+    {
+      "name": "Malam2",
+      "dragon_drops": [[0.28, 0.56], [0.36, 0.58], [0.44, 0.56]],
+      "balloon_drops": [[0.30, 0.64], [0.40, 0.64]],
+      "wall_wrecker_drop": [0.36, 0.52]
+    }
+  ]
+}
