@@ -844,17 +844,25 @@ git push origin main
 py -c "
 import json
 from pathlib import Path
-for p in [Path(r'dist\GARUDA\config.json'), Path(r'config.json')]:
-    if p.is_file():
-        d = json.loads(p.read_text(encoding='utf-8'))
-        d.setdefault('deck_strict_types', ['dragon','balloon','extra','rage','freeze'])
-        d.setdefault('deploy_jitter_px', 38)
-        d.setdefault('mirror_strategies', True)
-        d.setdefault('tap_delay_jitter_pct', 30)
-        d.setdefault('another_device_wait_s', 30)
-        d.setdefault('connection_lost_point', None)
-        p.write_text(json.dumps(d, indent=2), encoding='utf-8')
-        print(p, 'OK')
+keys = {
+    'deck_strict_types': ['dragon','balloon','extra','rage','freeze'],
+    'deploy_jitter_px': 38,
+    'mirror_strategies': True,
+    'tap_delay_jitter_pct': 30,
+    'another_device_wait_s': 30,
+    'connection_lost_point': None,
+    'zoom_out_enabled': True,
+    'zoom_out_pinches': 3,
+    'zoom_out_settle_s': 0.8,
+}
+targets = [Path(r'dist\GARUDA\config.json'), Path(r'config.json')]
+targets += sorted(Path(r'dist\GARUDA\profiles').glob('*.json'))
+for p in targets:
+    if not p.is_file(): continue
+    d = json.loads(p.read_text(encoding='utf-8'))
+    for k, v in keys.items(): d.setdefault(k, v)
+    p.write_text(json.dumps(d, indent=2), encoding='utf-8')
+    print(p, 'OK')
 "
 ```
 
