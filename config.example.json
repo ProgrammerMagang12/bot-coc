@@ -51,6 +51,7 @@
   "collect_points": [],
   "train_points": [],
   "train_wait_s": 5,
+  "train_ui": {},
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,

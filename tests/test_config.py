@@ -167,6 +167,23 @@ def test_example_config_deploy_and_event_fields():
     }
 
 
+def test_config_parses_train_ui(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["train_ui"] = {
+        "army_button": [0.05, 0.7],
+        "clear_troops": [0.9, 0.2],
+        "grid": {"dragon_drops": [0.4, 0.6]},
+        "close_button": [0.95, 0.05],
+    }
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    cfg = load_config(p)
+    assert cfg.train_ui["army_button"] == [0.05, 0.7]
+    assert cfg.train_ui["grid"]["dragon_drops"] == [0.4, 0.6]
+
+
 def test_invalid_hero_card_rejected(tmp_path):
     data = json.loads(EXAMPLE.read_text())
     data["hero_cards"] = [[1.5, 0.5]]

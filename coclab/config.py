@@ -74,6 +74,7 @@ class Config:
     collect_points: list[list[float]]
     train_points: list[list[float]]
     train_wait_s: int
+    train_ui: dict
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -287,6 +288,22 @@ def load_config(path: str | Path) -> Config:
         _point(pair, f"train_points[{i}]") for i, pair in enumerate(train_raw)
     ]
     train_wait_s = _nonneg_int(data.get("train_wait_s", 5), "train_wait_s")
+    ui_raw = data.get("train_ui", {})
+    if not isinstance(ui_raw, dict):
+        raise ConfigError("train_ui: expected an object")
+    train_ui: dict = {}
+    for key, value in ui_raw.items():
+        if value is None:
+            continue
+        if key == "grid":
+            if not isinstance(value, dict):
+                raise ConfigError("train_ui.grid: expected an object")
+            train_ui["grid"] = {
+                group: _point(point, f"train_ui.grid.{group}")
+                for group, point in value.items()
+            }
+        else:
+            train_ui[key] = _point(value, f"train_ui.{key}")
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -345,6 +362,7 @@ def load_config(path: str | Path) -> Config:
         collect_points=collect_points,
         train_points=train_points,
         train_wait_s=train_wait_s,
+        train_ui=train_ui,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,

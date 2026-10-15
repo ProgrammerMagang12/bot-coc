@@ -285,6 +285,43 @@ class _Session:
         self.deps.sleep(2)
         return StepResult(False, "army_mismatch")
 
+    def _build_army(self) -> bool:
+        """Deck Builder presisi: clear semua -> bangun sesuai GUI (tap=+1) -> tutup."""
+        ui = self.cfg.train_ui
+        if not ui or "army_button" not in ui or not ui.get("grid"):
+            logger.info("train_ui belum dikalibrasi - pakai train_points/manual")
+            return False
+        logger.info("Deck Builder: buka panel My Army")
+        self.actions.tap_percent(*ui["army_button"])
+        self.deps.sleep(2.5)
+        for key in ("clear_troops", "clear_spells", "clear_siege"):
+            point = ui.get(key)
+            if point is None:
+                continue
+            self.actions.tap_percent(*point)
+            logger.info("Deck Builder: clear %s", key)
+            self.deps.sleep(1.2)
+            if ui.get("clear_confirm") is not None:
+                self.actions.tap_percent(*ui["clear_confirm"])
+                self.deps.sleep(1.5)
+        built = 0
+        for group, point in ui.get("grid", {}).items():
+            count = int(self.cfg.army.get(group, 0))
+            if count <= 0:
+                continue
+            for _ in range(count):
+                if self.deps.should_stop():
+                    return False
+                self.actions.tap_percent(*point)
+                self.deps.sleep(0.45)
+            built += count
+            logger.info("Deck Builder: +%d %s", count, group)
+        logger.info("Deck Builder: %d unit diklik; tutup panel", built)
+        if ui.get("close_button") is not None:
+            self.actions.tap_percent(*ui["close_button"])
+            self.deps.sleep(2.0)
+        return True
+
     def _train_army(self) -> bool:
         """Klik urutan latih tersimpan (buka Army -> resep -> Train -> tutup) lalu tunggu."""
         if not self.cfg.train_points:
@@ -727,10 +764,16 @@ class _Session:
                 return result
             gate = self._army_gate()
             if not gate.ok:
-                if self.cfg.train_points and train_attempts < 1:
-                    if self._train_army():
-                        logger.info("Pasukan dilatih ulang - ulang siklus")
-                        return self.run_cycle(train_attempts + 1)
+                if train_attempts < 2 and self._build_army():
+                    logger.info("Deck dibangun ulang (presisi) - ulang siklus")
+                    return self.run_cycle(train_attempts + 1)
+                if (
+                    train_attempts < 2
+                    and self.cfg.train_points
+                    and self._train_army()
+                ):
+                    logger.info("Pasukan dilatih ulang (recipe) - ulang siklus")
+                    return self.run_cycle(train_attempts + 1)
                 return gate
             result = self.evaluate_loot()
             if result.ok:
