@@ -20,6 +20,7 @@ class Config:
     min_resource: int
     loot_roi: list[float]
     on_ocr_fail: str
+    drop_card_point: list[float]
     drop_points: list[list[float]]
     tap_delay_ms: int
     end_delay_s: int
@@ -118,6 +119,7 @@ def load_config(path: str | Path) -> Config:
         min_resource=_positive_int(_require(data, "min_resource"), "min_resource"),
         loot_roi=[x1, y1, x2, y2],
         on_ocr_fail=on_ocr_fail,
+        drop_card_point=_point(_require(data, "drop_card_point"), "drop_card_point"),
         drop_points=[_point(pair, "drop_points") for pair in drop_raw],
         tap_delay_ms=_positive_int(_require(data, "tap_delay_ms"), "tap_delay_ms"),
         end_delay_s=_positive_int(_require(data, "end_delay_s"), "end_delay_s"),

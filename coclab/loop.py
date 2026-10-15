@@ -95,10 +95,12 @@ class _Session:
 
     def _match_safe(self, shot: Path, template: str) -> vision.Match:
         """Like _match but treats an unavailable template file as not-found."""
+        if not (self.assets / template).is_file():
+            return vision.Match(False, 0, 0, 0.0)
         try:
             return self._match(shot, template)
         except ValueError as exc:
-            logger.info("Template %s unavailable (%s); skipped", template, exc)
+            logger.info("Template %s unreadable (%s); skipped", template, exc)
             return vision.Match(False, 0, 0, 0.0)
 
     # -- steps -----------------------------------------------------------
@@ -212,6 +214,9 @@ class _Session:
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
+        self.actions.tap_percent(*self.cfg.drop_card_point)
+        logger.info("Select troop card")
+        self.deps.sleep(0.5)
         for xp, yp in self.cfg.drop_points:
             self.actions.tap_percent(xp, yp)
             self.deps.sleep(self.cfg.tap_delay_ms / 1000)

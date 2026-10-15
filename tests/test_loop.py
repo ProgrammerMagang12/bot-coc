@@ -125,3 +125,16 @@ def test_return_home_skips_missing_event_template():
     deps.find_template = find_template
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok
+
+
+def test_live_attack_selects_troop_card_first():
+    from coclab.actions import Actions
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
+    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
+    assert summary.ok
+    card = (int(0.251 * 1600), int(0.933 * 900))
+    drop = (int(0.26 * 1600), int(0.62 * 900))
+    assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)

@@ -53,6 +53,20 @@ def test_example_config_loot_settle():
     assert cfg.loot_settle_s == 1.5
 
 
+def test_example_config_drop_card_point():
+    cfg = load_config(EXAMPLE)
+    assert cfg.drop_card_point == [0.251, 0.933]
+
+
+def test_invalid_drop_card_point_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["drop_card_point"] = [1.5, 0.5]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="drop_card_point"):
+        load_config(p)
+
+
 def test_invalid_loot_settle_rejected(tmp_path):
     data = json.loads(EXAMPLE.read_text())
     data["loot_settle_s"] = -1
