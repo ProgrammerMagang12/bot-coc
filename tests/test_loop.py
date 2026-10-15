@@ -514,6 +514,36 @@ def test_build_army_recipe_mode_at_menu(tmp_path):
     assert (int(0.965 * 1600), int(0.0911 * 900)) in adb.taps  # tutup
 
 
+def test_build_mode_clears_then_taps_grid(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["train_mode"] = "build"
+    data["army"] = {"dragon_drops": 2, "balloon_drops": 1, "wall_wrecker_drop": 1}
+    data["train_ui"] = {
+        "army_button": [0.05, 0.70],
+        "grid": {"dragon_drops": [0.40, 0.60], "balloon_drops": [0.45, 0.60]},
+        "close_button": [0.95, 0.05],
+    }
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    caps = iter([302352, 0])  # pertama terpakai 302 -> clear 1 ronde; lalu 0
+    deps.read_de = lambda img: next(caps)
+    badges = iter([1, 2])  # gate pertama mismatch -> build; setelah build pas
+    deps.read_badge = lambda img: next(badges)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and summary.cycles_done == 1
+    # clear 1 ronde: tandai kartu pertama + tap badge ⊖
+    assert (int(0.4731 * 1600), int(0.3333 * 900)) in adb.taps
+    assert (int(0.5044 * 1600), int(0.2833 * 900)) in adb.taps
+    # lalu buka picker + bangun: dragon x2, balloon x1
+    assert (int(0.5913 * 1600), int(0.3333 * 900)) in adb.taps
+    assert adb.taps.count((int(0.40 * 1600), int(0.60 * 900))) == 2
+    assert adb.taps.count((int(0.45 * 1600), int(0.60 * 900))) == 1
+
+
 def test_army_mismatch_trains_then_retries(tmp_path):
     import json
 

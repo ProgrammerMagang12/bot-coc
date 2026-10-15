@@ -52,6 +52,7 @@
   "train_points": [],
   "train_wait_s": 5,
   "train_ui": {},
+  "train_mode": "quick_train",
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,

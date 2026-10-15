@@ -319,16 +319,57 @@ class _Session:
             return gate
         return gate
 
+    PANEL_CAP_ROI = [0.42, 0.208, 0.515, 0.248]
+
+    def _panel_capacity(self) -> int | None:
+        """Baca 'terpakai/352' di panel My Army; None bila tak terbaca."""
+        shot = self._capture("panel_cap.png")
+        if shot is None:
+            return None
+        crop = self.deps.crop_percent(self._img(shot), *self.PANEL_CAP_ROI)
+        value = self.deps.read_de(crop)
+        if value is None:
+            return None
+        if value > 999:
+            return value // 1000
+        if 300 <= value <= 400:
+            return 0
+        return value
+
+    def _clear_army_slots(self) -> None:
+        """Kosongkan army di panel: loop tandai kartu pertama + tap badge ⊖ (terverifikasi live)."""
+        for _ in range(12):
+            if self.deps.should_stop():
+                return
+            cap = self._panel_capacity()
+            if cap == 0:
+                logger.info("Deck Builder: army kosong (0/352)")
+                return
+            self.actions.tap_percent(0.4731, 0.3333)  # kartu pertama (757,300)
+            self.deps.sleep(0.8)
+            self.actions.tap_percent(0.5044, 0.2833)  # badge ⊖ (807,255) = hapus
+            self.deps.sleep(1.2)
+        logger.info("Deck Builder: clear loop selesai (batas ronde)")
+
     def _build_army(self) -> bool:
-        """Deck Builder: mode RESEP (stabil, 3 tap) atau mode GRID (clear+build presisi)."""
+        """Deck Builder: mode RESEP (stabil) atau mode BANGUN (klik sesuai data GUI)."""
         ui = self.cfg.train_ui
         if not ui or "army_button" not in ui:
             logger.info("train_ui belum dikalibrasi - pakai train_points/manual")
             return False
+        has_recipe = ui.get("recipe_tab") is not None and ui.get("recipe_use") is not None
+        has_grid = bool(ui.get("grid"))
+        use_recipe = self.cfg.train_mode == "quick_train"
+        if use_recipe and not has_recipe:
+            logger.info("Mode resep dipilih tapi belum dikalibrasi - fallback ke mode bangun")
+            use_recipe = False
+        elif not use_recipe and not has_grid and has_recipe:
+            logger.info("Mode bangun tanpa grid - fallback ke mode resep")
+            use_recipe = True
         self.actions.tap_percent(*ui["army_button"])
-        logger.info("Deck Builder: buka panel (Edit Army)")
+        logger.info("Deck Builder: buka panel (mode %s)", "resep" if use_recipe else "bangun")
         self.deps.sleep(2.5)
-        if ui.get("recipe_tab") is not None and ui.get("recipe_use") is not None:
+        if use_recipe:
             self.actions.tap_percent(*ui["recipe_tab"])
             logger.info("Deck Builder: tab Saved Recipes")
             self.deps.sleep(1.5)
@@ -339,9 +380,6 @@ class _Session:
                 self.actions.tap_percent(*ui["close_button"])
                 self.deps.sleep(2.0)
             return True
-        if not ui.get("grid"):
-            logger.info("train_ui tanpa resep maupun grid - dilewati")
-            return False
         for key in ("clear_troops", "clear_spells", "clear_siege"):
             point = ui.get(key)
             if point is None:
@@ -352,6 +390,9 @@ class _Session:
             if ui.get("clear_confirm") is not None:
                 self.actions.tap_percent(*ui["clear_confirm"])
                 self.deps.sleep(1.5)
+        self._clear_army_slots()
+        self.actions.tap_percent(0.5913, 0.3333)  # buka daftar troop (tap area pasukan)
+        self.deps.sleep(2.0)
         built = 0
         for group, point in ui.get("grid", {}).items():
             count = int(self.cfg.army.get(group, 0))
@@ -809,11 +850,13 @@ class _Session:
         self.actions.tap_px(result.data["px"], result.data["py"])
         logger.info("Click Attack")
         self.deps.sleep(1.0)
-        if self.cfg.train_ui.get("recipe_tab") is not None and self.cfg.train_ui.get(
-            "recipe_use"
-        ) is not None:
+        if (
+            self.cfg.train_mode == "quick_train"
+            and self.cfg.train_ui.get("recipe_tab") is not None
+            and self.cfg.train_ui.get("recipe_use") is not None
+        ):
             if self._build_army():
-                logger.info("Deck Builder: resep army dimuat dari menu")
+                logger.info("Deck Builder: pasukan dimuat (mode resep)")
         self.deps.sleep(1.0)
 
         for _ in range(_MAX_LOOT_ROUNDS):

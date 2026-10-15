@@ -184,6 +184,20 @@ def test_config_parses_train_ui(tmp_path):
     assert cfg.train_ui["grid"]["dragon_drops"] == [0.4, 0.6]
 
 
+def test_example_config_train_mode_default():
+    cfg = load_config(EXAMPLE)
+    assert cfg.train_mode == "quick_train"
+
+
+def test_invalid_train_mode_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["train_mode"] = "xyz"
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="train_mode"):
+        load_config(p)
+
+
 def test_invalid_hero_card_rejected(tmp_path):
     data = json.loads(EXAMPLE.read_text())
     data["hero_cards"] = [[1.5, 0.5]]

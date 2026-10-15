@@ -80,6 +80,10 @@ FORM_HINT = (
     "Isi 0 pada 'Dark Elixir' / 'Auto-stop' untuk menonaktifkan. "
     "Bot jalan sampai kamu Stop / DE penuh / pasukan habis."
 )
+TRAIN_MODES = {
+    "Resep (Quick Train)": "quick_train",
+    "Bangun sesuai GUI (klik per troop)": "build",
+}
 
 
 class _QueueLogHandler(logging.Handler):
@@ -276,6 +280,26 @@ class App:
             grid, text=FORM_HINT, bg=CARD, fg=FG_FAINT, font=("Segoe UI", 7),
             wraplength=460, justify="left",
         ).grid(row=len(FORM_FIELDS), column=0, columnspan=2, sticky="w", pady=(8, 0))
+        mode_row = len(FORM_FIELDS) + 1
+        tk.Label(
+            grid, text="Mode isi pasukan", bg=CARD, fg=FG_DIM, font=("Segoe UI", 8), anchor="w"
+        ).grid(row=mode_row, column=0, sticky="w", pady=(6, 2), padx=(0, 8))
+        self.mode_var = tk.StringVar(value="Resep (Quick Train)")
+        style.configure(
+            "TrainMode.TCombobox",
+            fieldbackground=FIELD_BG,
+            background=PANEL,
+            foreground=FG,
+            arrowcolor=AMBER,
+        )
+        ttk.Combobox(
+            grid,
+            textvariable=self.mode_var,
+            values=list(TRAIN_MODES.keys()),
+            state="readonly",
+            width=30,
+            style="TrainMode.TCombobox",
+        ).grid(row=mode_row, column=1, sticky="w", pady=(6, 2))
 
         # tab 2: pasukan
         tab_army = tk.Frame(self.notebook, bg=CARD)
@@ -498,6 +522,11 @@ class App:
         army = data.get("army", {})
         for key, _label in ARMY_FIELDS:
             self.army_vars[key].set(str(army.get(key, "")))
+        mode = data.get("train_mode", "quick_train")
+        for label, value in TRAIN_MODES.items():
+            if value == mode:
+                self.mode_var.set(label)
+                break
         self._set_status_label(name)
 
     def _set_status_label(self, name: str | None) -> None:
@@ -590,6 +619,7 @@ class App:
                 raw = self.army_vars[key].get().strip()
                 if raw:
                     army[key] = int(raw)
+            data["train_mode"] = TRAIN_MODES.get(self.mode_var.get(), "quick_train")
             if "ldconsole" in str(data.get("emulator_path", "")).lower():
                 index = profiles.ldplayer_index_for_address(data.get("device_address", ""))
                 if index is not None:

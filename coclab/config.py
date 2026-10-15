@@ -75,6 +75,7 @@ class Config:
     train_points: list[list[float]]
     train_wait_s: int
     train_ui: dict
+    train_mode: str
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -304,6 +305,9 @@ def load_config(path: str | Path) -> Config:
             }
         else:
             train_ui[key] = _point(value, f"train_ui.{key}")
+    train_mode = str(data.get("train_mode", "quick_train"))
+    if train_mode not in ("quick_train", "build"):
+        raise ConfigError("train_mode: expected 'quick_train' or 'build'")
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -363,6 +367,7 @@ def load_config(path: str | Path) -> Config:
         train_points=train_points,
         train_wait_s=train_wait_s,
         train_ui=train_ui,
+        train_mode=train_mode,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,
