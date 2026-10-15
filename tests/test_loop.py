@@ -136,5 +136,5 @@ def test_live_attack_selects_troop_card_first():
     summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
     assert summary.ok
     card = (int(0.251 * 1600), int(0.933 * 900))
-    drop = (int(0.26 * 1600), int(0.62 * 900))
+    drop = (int(0.35 * 1600), int(0.72 * 900))  # dari config.example.json
     assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
