@@ -112,3 +112,7 @@ def test_ocr_digits_multiple_number_groups_return_none():
 
 def test_ocr_digits_single_number_with_label_prefix():
     assert ocr_digits(None, engine=lambda _i: "Loot: 1,250") == 1250
+
+
+def test_ocr_digits_space_separated_thousands_are_one_number():
+    assert ocr_digits(None, engine=lambda _i: "1 369 204") == 1369204

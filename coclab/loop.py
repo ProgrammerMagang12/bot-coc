@@ -93,6 +93,14 @@ class _Session:
             self._img(shot), self.assets / template, self.cfg.threshold
         )
 
+    def _match_safe(self, shot: Path, template: str) -> vision.Match:
+        """Like _match but treats an unavailable template file as not-found."""
+        try:
+            return self._match(shot, template)
+        except ValueError as exc:
+            logger.info("Template %s unavailable (%s); skipped", template, exc)
+            return vision.Match(False, 0, 0, 0.0)
+
     # -- steps -----------------------------------------------------------
 
     def connect(self) -> StepResult:
@@ -138,13 +146,20 @@ class _Session:
             self.actions.tap_px(match.cx, match.cy)
             logger.info("Click Find Match")
             self.deps.sleep(1.0)
+            confirm_shot = self._capture("matchmaking_confirm.png")
+            if confirm_shot is not None:
+                confirm = self._match_safe(confirm_shot, "attack2.png")
+                if confirm.found:
+                    self.actions.tap_px(confirm.cx, confirm.cy)
+                    logger.info("Click Attack (confirm)")
+                    self.deps.sleep(1.0)
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
         while True:
             shot = self._capture("searching.png")
             if shot is None:
                 return StepResult(False, "search screen capture failed")
-            if not self._match(shot, "searching_for_opponents.png").found:
-                logger.info("Opponent found")
+            if self._match_safe(shot, "next.png").found:
+                logger.info("Opponent found (Next button visible)")
                 return StepResult(True)
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "opponent search timeout")
@@ -203,7 +218,7 @@ class _Session:
             shot = self._capture("returnhome.png")
             if shot is None:
                 return StepResult(False, "return home capture failed")
-            if self._match(shot, "returnhome.png").found or self._match(
+            if self._match_safe(shot, "returnhome.png").found or self._match_safe(
                 shot, "returnhome_event.png"
             ).found:
                 break

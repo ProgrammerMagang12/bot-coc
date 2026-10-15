@@ -58,7 +58,8 @@ def full_script(**overrides):
     base = {
         "attack.png": Match(True, 1, 1, 0.95),
         "find_match.png": Match(True, 1, 1, 0.95),
-        "searching_for_opponents.png": Match(False, 0, 0, 0.1),
+        "attack2.png": Match(True, 600, 700, 0.95),
+        "next.png": Match(True, 1400, 640, 0.95),
         "returnhome.png": Match(True, 1, 1, 0.95),
     }
     base.update(overrides)

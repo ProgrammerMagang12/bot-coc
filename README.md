@@ -22,7 +22,7 @@ Prototipe otomasi **original** (kode ditulis sendiri dari nol) untuk satu siklus
 2. Pastikan `adb devices` menampilkan device berstatus `device`.
 3. Buat template dari screenshot sendiri (mis. screenshot di `work/<device>/`):
    `py tools/make_template.py --image work/.../screen.png --name attack`
-   Template yang dibutuhkan: **attack, find_match, searching_for_opponents, next, returnhome, returnhome_event**.
+   Template yang dibutuhkan: **attack, find_match, attack2, next, returnhome, returnhome_event**.
 4. Mode aman dulu: `py main.py` atau `py main.py --observe --cycles 1` (observe — tidak ada tap fisik; semua keputusan masuk log).
 5. Setelah observe terbukti benar: `py main.py --live --cycles 1` (aksi nyata; mulai dari 1 siklus).
 

@@ -89,3 +89,31 @@ def test_observe_mode_never_taps_end_to_end():
     deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and adb.taps == []
+
+
+def test_matchmaking_clicks_attack2_confirm():
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert (600, 700) in adb.taps  # tombol "Attack!" di layar army
+
+
+def test_return_home_skips_missing_event_template():
+    script = full_script(**{"returnhome.png": Match(False, 0, 0, 0.1)})
+    calls = {"n": 0}
+
+    def find_template(img, tpl, threshold):
+        name = Path(tpl).name
+        if name == "returnhome_event.png":
+            raise ValueError("cannot read image: assets\\returnhome_event.png")
+        if name == "returnhome.png":
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                return Match(True, 800, 700, 0.95)
+        return script.get(name, Match(False, 0, 0, 0.0))
+
+    deps, adb = make_deps(script, [])
+    deps.find_template = find_template
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok

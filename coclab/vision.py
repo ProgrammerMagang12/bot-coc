@@ -112,14 +112,21 @@ def ocr_digits(
     numeric_tokens = [
         token for token in text.split() if any(ch.isdigit() for ch in token)
     ]
-    if len(numeric_tokens) != 1:
+    if not numeric_tokens:
+        logger.info("OCR: no numeric field found (raw=%r)", text)
+        return None
+    if len(numeric_tokens) == 1:
+        digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
+    elif all(token.isdigit() and len(token) <= 3 for token in numeric_tokens):
+        # "1 369 204" — one number written with space-separated thousands
+        digits = "".join(numeric_tokens)
+    else:
         logger.info(
             "OCR: expected exactly one numeric field, found %d (raw=%r)",
             len(numeric_tokens),
             text,
         )
         return None
-    digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
     if not digits or len(digits) > _MAX_DIGITS:
         return None
     return int(digits)
