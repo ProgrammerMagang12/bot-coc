@@ -74,3 +74,29 @@ def test_invalid_loot_settle_rejected(tmp_path):
     p.write_text(json.dumps(data))
     with pytest.raises(ConfigError, match="loot_settle_s"):
         load_config(p)
+
+
+def test_example_config_v2_fields():
+    cfg = load_config(EXAMPLE)
+    assert cfg.strategy_file == "AttackStrategies.json"
+    assert set(cfg.card_points) >= {"dragon", "balloon", "wall_wrecker"}
+    assert cfg.wall_upgrade.enabled is False
+    assert cfg.wall_upgrade.gold_min == 2000000
+
+
+def test_invalid_wall_gold_min_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["wall_upgrade"]["gold_min"] = -5
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="gold_min"):
+        load_config(p)
+
+
+def test_missing_card_point_key_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    del data["card_points"]["balloon"]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="balloon"):
+        load_config(p)

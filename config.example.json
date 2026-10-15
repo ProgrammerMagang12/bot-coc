@@ -16,5 +16,23 @@
   "search_timeout_s": 60,
   "workdir": "work",
   "assets_dir": "assets",
-  "loot_settle_s": 1.5
+  "loot_settle_s": 1.5,
+  "strategy_file": "AttackStrategies.json",
+  "card_points": {
+    "dragon": [0.251, 0.933],
+    "balloon": [0.328, 0.933],
+    "wall_wrecker": [0.39, 0.933]
+  },
+  "wall_upgrade": {
+    "enabled": false,
+    "gold_min": 2000000,
+    "gold_storage_roi": [0.829, 0.04, 0.94, 0.078],
+    "upgrade_logo": "logo_up.png",
+    "wall_text_roi": [0.34, 0.137, 0.683, 0.764],
+    "gold_upgrade_point": [0.606, 0.81],
+    "gold_confirm_point": [0.698, 0.879],
+    "elixir_upgrade_point": [0.717, 0.786],
+    "elixir_confirm_point": [0.696, 0.872],
+    "max_scroll_tries": 20
+  }
 }
