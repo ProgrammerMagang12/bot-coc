@@ -19,6 +19,10 @@ from coclab.strategy import load_strategies as load_strategies_default
 
 logger = logging.getLogger(__name__)
 
+
+def _never_stop() -> bool:
+    return False
+
 _FIND_ATTACK_TRIES = 3
 _MAX_LOOT_ROUNDS = 25
 
@@ -39,6 +43,7 @@ class Deps:
     crop_percent: Callable[..., object]
     ocr_digits: Callable[..., int | None]
     read_loot: Callable[..., int | None]
+    should_stop: Callable[..., bool]
     actions_factory: Callable[..., object]
     load_strategies: Callable[[str], list]
     sleep: Callable[[float], None]
@@ -58,6 +63,7 @@ def _default_deps(config: Config) -> Deps:
         crop_percent=vision.crop_percent,
         ocr_digits=vision.ocr_digits,
         read_loot=digits.read_loot_number,
+        should_stop=_never_stop,
         actions_factory=Actions,
         load_strategies=load_strategies_default,
         sleep=time.sleep,
@@ -202,7 +208,10 @@ class _Session:
         elixir = (
             self._read_verified(self.cfg.loot_roi_elixir) if gold is not None else None
         )
-        if gold is None or elixir is None:
+        dark = None
+        if gold is not None and elixir is not None and self.cfg.min_dark > 0:
+            dark = self._read_verified(self.cfg.loot_roi_dark)
+        if gold is None or elixir is None or (self.cfg.min_dark > 0 and dark is None):
             if self.cfg.on_ocr_fail == "stop":
                 return StepResult(False, "OCR unavailable (policy: stop)")
             if self.cfg.on_ocr_fail == "next":
@@ -211,18 +220,25 @@ class _Session:
             logger.warning("OCR unavailable; continuing (policy: attack)")
             return StepResult(True)
         logger.info(
-            "Loot: gold %s (min %s) | elixir %s (min %s)",
+            "Loot: gold %s (min %s) | elixir %s (min %s) | dark %s (min %s)",
             gold,
             self.cfg.min_gold,
             elixir,
             self.cfg.min_elixir,
+            dark if dark is not None else "-",
+            self.cfg.min_dark,
         )
-        if gold >= self.cfg.min_gold and elixir >= self.cfg.min_elixir:
+        if (
+            gold >= self.cfg.min_gold
+            and elixir >= self.cfg.min_elixir
+            and (self.cfg.min_dark == 0 or (dark or 0) >= self.cfg.min_dark)
+        ):
             return StepResult(True)
         logger.info(
-            "Loot low: gold %s / elixir %s below thresholds, continue search",
+            "Loot low: gold %s / elixir %s / dark %s below thresholds, continue search",
             gold,
             elixir,
+            dark if dark is not None else "-",
         )
         return StepResult(False, "loot_low")
 
@@ -325,13 +341,33 @@ class _Session:
                 self.actions.tap_percent(xp, yp)
                 self.deps.sleep(self.cfg.tap_delay_ms / 1000)
 
-        logger.info("Auto end in %d seconds", self.cfg.end_delay_s)
-        self.deps.sleep(self.cfg.end_delay_s)
-        self.actions.tap_percent(*self.cfg.end_battle_point)
-        logger.info("Click End Battle")
-        self.deps.sleep(0.2)
-        self.actions.tap_percent(*self.cfg.confirm_point)
-        logger.info("Confirm End Battle")
+        if self.cfg.speed_up_taps > 0:
+            for _ in range(self.cfg.speed_up_taps):
+                self.actions.tap_percent(*self.cfg.speed_up_point)
+                self.deps.sleep(0.5)
+            logger.info("Speed up x%d", 2 ** self.cfg.speed_up_taps)
+
+        logger.info("Waiting up to %d s for battle end", self.cfg.end_delay_s)
+        ended_early = False
+        for second in range(max(self.cfg.end_delay_s, 1)):
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
+            self.deps.sleep(1)
+            if second % 5 == 4:
+                shot = self._capture("battle_end.png")
+                if shot is not None and (
+                    self._match_safe(shot, "returnhome.png").found
+                    or self._match_safe(shot, "claim_reward.png").found
+                ):
+                    ended_early = True
+                    logger.info("Battle ended early (results screen visible)")
+                    break
+        if not ended_early:
+            self.actions.tap_percent(*self.cfg.end_battle_point)
+            logger.info("Click End Battle")
+            self.deps.sleep(0.2)
+            self.actions.tap_percent(*self.cfg.confirm_point)
+            logger.info("Confirm End Battle")
         return StepResult(True)
 
     def return_home(self) -> StepResult:
@@ -348,6 +384,8 @@ class _Session:
             claim = self._match_safe(shot, "claim_reward.png")
             if claim.found:
                 return self._claim_event_reward(claim)
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "return home timeout")
             self.deps.sleep(10)
@@ -379,6 +417,8 @@ class _Session:
         (star_bonus_point) and Notifications "Not Now" (notifications_not_now_point).
         """
         for _ in range(max_rounds):
+            if self.deps.should_stop():
+                return False
             shot = self._capture("until_home.png")
             if shot is None:
                 self.deps.sleep(2.5)
@@ -438,6 +478,8 @@ class _Session:
     # -- cycle -----------------------------------------------------------
 
     def run_cycle(self) -> StepResult:
+        if self.deps.should_stop():
+            return StepResult(False, "stopped by user")
         result = self.find_attack()
         if not result.ok:
             return result
@@ -469,10 +511,18 @@ class _Session:
         return result
 
 
-def run(config: Config, mode: str, cycles: int, deps: Deps | None = None) -> RunSummary:
+def run(
+    config: Config,
+    mode: str,
+    cycles: int,
+    deps: Deps | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> RunSummary:
     """Run `cycles` full bot cycles. Step-level failures come back as a RunSummary."""
     if deps is None:
         deps = _default_deps(config)
+    if should_stop is not None:
+        deps.should_stop = should_stop
     session = _Session(config, mode, deps)
 
     result = session.connect()

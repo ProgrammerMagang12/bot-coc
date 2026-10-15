@@ -17,3 +17,8 @@ def test_read_loot_fixtures_exact():
 
 def test_read_loot_blank_returns_none():
     assert read_loot_number(np.zeros((40, 200, 3), np.uint8)) is None
+
+
+def test_read_loot_ignores_non_digit_blob():
+    # crop ini berisi "1 678" + batu di kanan (blob skor ~0.6, bukan digit)
+    assert read_loot_number(load_image(FIXTURES / "dark_072.png")) == 1678

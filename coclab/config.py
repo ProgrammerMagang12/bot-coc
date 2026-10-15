@@ -56,6 +56,10 @@ class Config:
     continue_point: list[float]
     star_bonus_point: list[float]
     notifications_not_now_point: list[float]
+    speed_up_point: list[float]
+    speed_up_taps: int
+    min_dark: int
+    loot_roi_dark: list[float]
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -95,6 +99,12 @@ def _roi(value: Any, field: str) -> list[float]:
 def _positive_int(value: Any, field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ConfigError(f"{field}: expected a positive integer")
+    return value
+
+
+def _nonneg_int(value: Any, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ConfigError(f"{field}: expected a non-negative integer")
     return value
 
 
@@ -206,6 +216,12 @@ def load_config(path: str | Path) -> Config:
         data.get("notifications_not_now_point", [0.38, 0.68]),
         "notifications_not_now_point",
     )
+    speed_up_point = _point(data.get("speed_up_point", [0.959, 0.572]), "speed_up_point")
+    speed_up_taps = _nonneg_int(data.get("speed_up_taps", 2), "speed_up_taps")
+    min_dark = _nonneg_int(data.get("min_dark", 0), "min_dark")
+    loot_roi_dark = _roi(
+        data.get("loot_roi_dark", [0.050, 0.222, 0.183, 0.278]), "loot_roi_dark"
+    )
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -246,6 +262,10 @@ def load_config(path: str | Path) -> Config:
         continue_point=continue_point,
         star_bonus_point=star_bonus_point,
         notifications_not_now_point=notifications_not_now_point,
+        speed_up_point=speed_up_point,
+        speed_up_taps=speed_up_taps,
+        min_dark=min_dark,
+        loot_roi_dark=loot_roi_dark,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,

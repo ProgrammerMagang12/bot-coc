@@ -20,8 +20,8 @@ def test_live_attack_taps_card_then_drop_then_end_confirm_home():
     assert adb.swipes == []
     assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
     expected_tail = [
-        (int(0.065 * 1600), int(0.75 * 900)),  # end battle
-        (int(0.614 * 1600), int(0.648 * 900)),  # confirm
-        (int(0.497 * 1600), int(0.849 * 900)),  # return home
+        (int(0.959 * 1600), int(0.572 * 900)),  # speed up tap 1
+        (int(0.959 * 1600), int(0.572 * 900)),  # speed up tap 2 (x4)
+        (int(0.497 * 1600), int(0.849 * 900)),  # return home (results sudah tampil)
     ]
     assert adb.taps[-3:] == expected_tail

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "digits"
 NORM_SIZE = (14, 20)  # (w, h)
 MIN_GLYPHS, MAX_GLYPHS = 3, 7  # loot numbers are 3-7 digits
+MIN_SCORE = 0.80  # real digits score ~0.95-1.0; background blobs ~0.6
 
 _templates: dict[int, list[np.ndarray]] | None = None
 
@@ -68,6 +69,7 @@ def segment_glyphs(crop: np.ndarray, min_height: int = 55, max_height: int = 92)
 
 
 def classify_glyph(glyph: np.ndarray) -> str | None:
+    """Best-matching digit, or None when below the confidence threshold (junk blob)."""
     templates = _load_templates()
     if not templates:
         return None
@@ -81,20 +83,29 @@ def classify_glyph(glyph: np.ndarray) -> str | None:
             score = float(np.mean(norm == tmpl))
             if score > best_score:
                 best_digit, best_score = digit, score
-    return str(best_digit) if best_digit is not None else None
+    if best_digit is None or best_score < MIN_SCORE:
+        return None
+    return str(best_digit)
 
 
 def read_loot_number(crop: np.ndarray) -> int | None:
-    """Read a loot number crop; returns int or None when implausible."""
+    """Read a loot number crop; returns int or None when implausible.
+
+    Blobs below the classification confidence threshold are dropped as debris
+    (rocks/grass); real glyphs score far above it.
+    """
     glyphs = segment_glyphs(crop)
-    if not MIN_GLYPHS <= len(glyphs) <= MAX_GLYPHS:
-        logger.info("loot digits: implausible glyph count %d", len(glyphs))
-        return None
-    digits = []
+    digits: list[str] = []
+    skipped = 0
     for glyph in glyphs:
         d = classify_glyph(glyph)
         if d is None:
-            logger.info("loot digits: template set unavailable")
-            return None
+            skipped += 1
+            continue
         digits.append(d)
+    if skipped:
+        logger.info("loot digits: skipped %d non-digit blob(s)", skipped)
+    if not MIN_GLYPHS <= len(digits) <= MAX_GLYPHS:
+        logger.info("loot digits: implausible glyph count %d", len(digits))
+        return None
     return int("".join(digits))

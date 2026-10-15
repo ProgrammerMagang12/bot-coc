@@ -246,11 +246,73 @@ def test_multi_drop_attack_taps_cards_then_points():
         (int(0.30 * 1600), int(0.60 * 900)),
         (int(0.32 * 1600), int(0.62 * 900)),
     ]
-    assert body[38:] == [
-        (int(0.065 * 1600), int(0.75 * 900)),
-        (int(0.614 * 1600), int(0.648 * 900)),
-        (int(0.497 * 1600), int(0.849 * 900)),
+    speed = (int(0.959 * 1600), int(0.572 * 900))
+    assert body[38:40] == [speed, speed]  # ketuk speed 2x (x1 -> x4)
+    # results screen langsung terlihat → battle dianggap selesai lebih awal:
+    # End Battle/Confirm tidak ditap, langsung Return Home
+    assert body[40] == (int(0.497 * 1600), int(0.849 * 900))
+    assert len(body) == 41
+
+
+def test_min_dark_enforced(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["min_dark"] = 5000
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
+    deps, adb = make_deps(script, states)
+    # ronde 1: dark 4000 < 5000 → low; ronde 2: semua tinggi → attack
+    loots = iter(
+        [
+            999999, 999999, 999999, 999999, 4000, 4000,
+            999999, 999999, 999999, 999999, 6000, 6000,
+        ]
+    )
+    deps.read_loot = lambda img: next(loots)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and states.count("MATCHMAKING") == 2
+
+
+def test_stop_flag_ends_cycle():
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.should_stop = lambda: True
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "stopped" in summary.reason.lower()
+    assert adb.taps == []
+
+
+def test_battle_wait_normal_end_when_results_appear_late():
+    from coclab.strategy import Strategy
+
+    states = []
+    script = full_script()
+    script["returnhome.png"] = Match(False, 0, 0, 0.1)
+    deps, adb = make_deps(script, states)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="L",
+            dragon_drops=[[0.50, 0.50]],
+            balloon_drops=[[0.51, 0.51]],
+            wall_wrecker_drop=None,
+        )
     ]
+    end_battle = (int(0.065 * 1600), int(0.75 * 900))
+    orig = deps.find_template
+
+    def find_template(img, tpl, threshold):
+        if Path(tpl).name == "returnhome.png" and end_battle in adb.taps:
+            return Match(True, 700, 700, 0.95)
+        return orig(img, tpl, threshold)
+
+    deps.find_template = find_template
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert end_battle in adb.taps
+    assert (int(0.614 * 1600), int(0.648 * 900)) in adb.taps
 
 
 def test_army_counts_cycle_strategy_points(tmp_path):

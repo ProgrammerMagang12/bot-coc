@@ -141,6 +141,10 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.continue_point == [0.51, 0.90]
     assert cfg.star_bonus_point == [0.495, 0.82]
     assert cfg.notifications_not_now_point == [0.38, 0.68]
+    assert cfg.speed_up_point == [0.959, 0.572]
+    assert cfg.speed_up_taps == 2
+    assert cfg.min_dark == 0
+    assert cfg.loot_roi_dark == [0.050, 0.222, 0.183, 0.278]
     assert cfg.army == {
         "dragon_drops": 13,
         "balloon_drops": 18,

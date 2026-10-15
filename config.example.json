@@ -33,6 +33,10 @@
   "continue_point": [0.51, 0.90],
   "star_bonus_point": [0.495, 0.82],
   "notifications_not_now_point": [0.38, 0.68],
+  "speed_up_point": [0.959, 0.572],
+  "speed_up_taps": 2,
+  "min_dark": 0,
+  "loot_roi_dark": [0.050, 0.222, 0.183, 0.278],
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,
