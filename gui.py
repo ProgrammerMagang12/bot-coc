@@ -17,6 +17,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
+from tkinter import ttk
 
 from coclab import profiles
 from coclab.adb import Adb
@@ -76,7 +77,7 @@ ARMY_FIELDS = (
     ("freeze_spell", "Freeze"),
 )
 FORM_HINT = (
-    "Isi 0 pada 'Loot minimal: Dark Elixir' atau 'Auto-stop' untuk menonaktifkan. "
+    "Isi 0 pada 'Dark Elixir' / 'Auto-stop' untuk menonaktifkan. "
     "Bot jalan sampai kamu Stop / DE penuh / pasukan habis."
 )
 
@@ -125,8 +126,8 @@ class App:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         root.title("GARUDA — CoC Raid Bot")
-        root.geometry("1060x700")
-        root.minsize(940, 600)
+        root.geometry("840x560")
+        root.minsize(780, 500)
         root.configure(bg=BG)
         self.instances: dict[str, _Instance] = {}
         self.form_vars: dict[str, tk.StringVar] = {}
@@ -138,7 +139,7 @@ class App:
         self.root.after(150, self._drain_logs)
 
     # -- widgets ------------------------------------------------------------------
-    def _flat_button(self, parent, text, bg, bg_dark, command, font=None, width=None, pady=4):
+    def _flat_button(self, parent, text, bg, bg_dark, command, font=None, width=None, pady=3):
         btn = tk.Button(
             parent,
             text=text,
@@ -151,7 +152,7 @@ class App:
             command=command,
             font=font or ("Segoe UI", 9, "bold"),
             bd=0,
-            padx=10,
+            padx=9,
             pady=pady,
             **(dict(width=width) if width else {}),
         )
@@ -160,7 +161,7 @@ class App:
         return btn
 
     def _dark_entry(self, parent, var, width=20, justify="left"):
-        entry = tk.Entry(
+        return tk.Entry(
             parent,
             textvariable=var,
             width=width,
@@ -174,52 +175,55 @@ class App:
             highlightcolor=AMBER,
             font=("Segoe UI", 9),
         )
-        return entry
 
-    def _card_frame(self, parent, title):
-        outer = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER)
-        head = tk.Frame(outer, bg=PANEL)
-        head.pack(fill="x", padx=12, pady=(8, 2))
-        tk.Frame(head, bg=AMBER, width=4, height=16).pack(side="left")
-        tk.Label(
-            head, text=title, bg=PANEL, fg=AMBER, font=("Segoe UI", 10, "bold")
-        ).pack(side="left", padx=8)
-        body = tk.Frame(outer, bg=PANEL)
-        body.pack(fill="both", expand=True, padx=12, pady=(2, 10))
-        return outer, body
+    def _danger(self, parent, var, width=6):
+        return self._dark_entry(parent, var, width=width, justify="center")
 
     # -- UI -----------------------------------------------------------------
     def _build_ui(self) -> None:
-        header = tk.Frame(self.root, bg=PANEL, height=60)
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 0, 0, 0))
+        style.configure(
+            "TNotebook.Tab",
+            background=PANEL,
+            foreground=FG_DIM,
+            padding=[13, 5],
+            font=("Segoe UI", 9, "bold"),
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", CARD)],
+            foreground=[("selected", AMBER)],
+        )
+
+        header = tk.Frame(self.root, bg=PANEL, height=44)
         header.pack(fill="x")
         header.pack_propagate(False)
-        left = tk.Frame(header, bg=PANEL)
-        left.pack(side="left", padx=16)
-        tk.Label(left, text="🦅  GARUDA", bg=PANEL, fg=AMBER, font=("Segoe UI", 17, "bold")).pack(
-            anchor="w"
+        tk.Label(header, text="🦅 GARUDA", bg=PANEL, fg=AMBER, font=("Segoe UI", 14, "bold")).pack(
+            side="left", padx=(12, 6)
         )
-        tk.Label(
-            left, text="CoC Raid Bot — multi akun", bg=PANEL, fg=FG_DIM, font=("Segoe UI", 8)
-        ).pack(anchor="w")
-        right = tk.Frame(header, bg=PANEL)
-        right.pack(side="right", padx=16)
-        tk.Label(
-            right, text="● siap", bg=PANEL, fg=FG_FAINT, font=("Segoe UI", 9)
-        ).pack()
+        tk.Label(header, text="CoC Raid Bot", bg=PANEL, fg=FG_DIM, font=("Segoe UI", 8)).pack(
+            side="left", pady=(8, 0)
+        )
+        tk.Label(header, text="● siap", bg=PANEL, fg=FG_FAINT, font=("Segoe UI", 8)).pack(
+            side="right", padx=12
+        )
 
         body = tk.Frame(self.root, bg=BG)
-        body.pack(fill="both", expand=True, padx=10, pady=8)
+        body.pack(fill="both", expand=True, padx=8, pady=6)
 
-        # ---------------- sidebar ----------------
-        side = tk.Frame(body, bg=SIDEBAR, width=235, highlightthickness=1, highlightbackground=BORDER)
-        side.pack(side="left", fill="y", padx=(0, 8))
+        # ---------------- sidebar (kompak) ----------------
+        side = tk.Frame(body, bg=SIDEBAR, width=200, highlightthickness=1, highlightbackground=BORDER)
+        side.pack(side="left", fill="y", padx=(0, 6))
         side.pack_propagate(False)
-        tk.Label(side, text="AKUN", bg=SIDEBAR, fg=AMBER, font=("Segoe UI", 10, "bold")).pack(
-            anchor="w", padx=12, pady=(10, 6)
+        tk.Label(side, text="AKUN", bg=SIDEBAR, fg=AMBER, font=("Segoe UI", 9, "bold")).pack(
+            anchor="w", padx=10, pady=(8, 4)
         )
         listwrap = tk.Frame(side, bg=SIDEBAR)
-        listwrap.pack(fill="both", expand=True, padx=(6, 2))
-        self.acc_canvas = tk.Canvas(listwrap, bg=SIDEBAR, highlightthickness=0, width=212)
+        listwrap.pack(fill="both", expand=True, padx=(4, 1))
+        self.acc_canvas = tk.Canvas(listwrap, bg=SIDEBAR, highlightthickness=0, width=182)
         acc_scroll = tk.Scrollbar(listwrap, orient="vertical", command=self.acc_canvas.yview, bd=0)
         self.acc_canvas.configure(yscrollcommand=acc_scroll.set)
         acc_scroll.pack(side="right", fill="y")
@@ -235,89 +239,108 @@ class App:
             lambda e: self.acc_canvas.itemconfigure(self._acc_window, width=e.width),
         )
         btns = tk.Frame(side, bg=SIDEBAR)
-        btns.pack(fill="x", padx=10, pady=10)
-        self._flat_button(btns, "+  Tambah Akun", BLUE, BLUE_DARK, self._add_profile).pack(
-            fill="x", pady=2
+        btns.pack(fill="x", padx=8, pady=8)
+        self._flat_button(btns, "+ Tambah", BLUE, BLUE_DARK, self._add_profile).pack(
+            side="left", expand=True, fill="x"
         )
-        self._flat_button(btns, "✎  Ganti Nama", AMBER, AMBER_DARK, self._rename_profile).pack(
-            fill="x", pady=2
+        self._flat_button(btns, "✎", AMBER, AMBER_DARK, self._rename_profile, width=3).pack(
+            side="left", padx=3
         )
-        self._flat_button(btns, "✕  Hapus Akun", RED, RED_DARK, self._delete_profile).pack(
-            fill="x", pady=2
+        self._flat_button(btns, "✕", RED, RED_DARK, self._delete_profile, width=3).pack(
+            side="left"
         )
 
-        # ---------------- main ----------------
+        # ---------------- main: tabs + kontrol ----------------
         main = tk.Frame(body, bg=BG)
         main.pack(side="left", fill="both", expand=True)
 
-        form_card, form = self._card_frame(main, "PENGATURAN")
-        form_card.pack(fill="x", pady=(0, 6))
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill="both", expand=True)
+
+        # tab 1: pengaturan
+        tab_set = tk.Frame(self.notebook, bg=CARD)
+        self.notebook.add(tab_set, text="⚙  Pengaturan")
+        grid = tk.Frame(tab_set, bg=CARD)
+        grid.pack(fill="both", expand=True, padx=12, pady=10)
         for i, (key, label) in enumerate(FORM_FIELDS):
-            r, c = divmod(i, 2)
-            cell = tk.Frame(form, bg=PANEL)
-            cell.grid(row=r, column=c, sticky="ew", padx=(0, 18), pady=3)
-            tk.Label(cell, text=label, bg=PANEL, fg=FG_DIM, font=("Segoe UI", 8)).pack(anchor="w")
+            tk.Label(grid, text=label, bg=CARD, fg=FG_DIM, font=("Segoe UI", 8), anchor="w").grid(
+                row=i, column=0, sticky="w", pady=2, padx=(0, 8)
+            )
             var = tk.StringVar()
             self.form_vars[key] = var
-            self._dark_entry(cell, var, width=26).pack(fill="x", ipady=3)
-        form.columnconfigure(0, weight=1)
-        form.columnconfigure(1, weight=1)
+            self._dark_entry(grid, var, width=30).grid(
+                row=i, column=1, sticky="ew", pady=2, ipady=2
+            )
+        grid.columnconfigure(1, weight=1)
         tk.Label(
-            form, text=FORM_HINT, bg=PANEL, fg=FG_FAINT, font=("Segoe UI", 8), wraplength=700,
-            justify="left",
-        ).grid(row=(len(FORM_FIELDS) + 1) // 2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            grid, text=FORM_HINT, bg=CARD, fg=FG_FAINT, font=("Segoe UI", 7),
+            wraplength=460, justify="left",
+        ).grid(row=len(FORM_FIELDS), column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        army_card, army = self._card_frame(main, "JUMLAH PASUKAN  ·  tap per grup")
-        army_card.pack(fill="x", pady=(0, 6))
+        # tab 2: pasukan
+        tab_army = tk.Frame(self.notebook, bg=CARD)
+        self.notebook.add(tab_army, text="🛡  Pasukan")
+        army = tk.Frame(tab_army, bg=CARD)
+        army.pack(fill="both", expand=True, padx=12, pady=10)
+        tk.Label(
+            army, text="Jumlah tap per grup (jumlah pasukan di bar)", bg=CARD, fg=FG_DIM,
+            font=("Segoe UI", 8),
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
         for i, (key, label) in enumerate(ARMY_FIELDS):
-            r, c = divmod(i, 3)
-            cell = tk.Frame(army, bg=PANEL)
-            cell.grid(row=r, column=c, sticky="ew", padx=(0, 16), pady=2)
-            tk.Label(cell, text=label, bg=PANEL, fg=FG_DIM, font=("Segoe UI", 8)).pack(anchor="w")
+            r, c = divmod(i, 2)
+            tk.Label(army, text=label, bg=CARD, fg=FG_DIM, font=("Segoe UI", 8), anchor="w").grid(
+                row=r + 1, column=c * 2, sticky="w", pady=3, padx=(0, 6)
+            )
             var = tk.StringVar()
             self.army_vars[key] = var
-            self._dark_entry(cell, var, width=7, justify="center").pack(anchor="w", ipady=3)
-        for c in range(3):
-            army.columnconfigure(c, weight=1)
+            self._dark_entry(army, var, width=6, justify="center").grid(
+                row=r + 1, column=c * 2 + 1, sticky="w", pady=3, padx=(0, 24), ipady=2
+            )
 
-        ctrl = tk.Frame(main, bg=BG)
-        ctrl.pack(fill="x", pady=(0, 6))
-        self._flat_button(ctrl, "💾  Simpan", BLUE, BLUE_DARK, self._save_current).pack(side="left")
-        self._flat_button(
-            ctrl, "▶  START", GREEN, GREEN_DARK, self._start,
-            font=("Segoe UI", 11, "bold"), width=12, pady=6,
-        ).pack(side="left", padx=8)
-        self._flat_button(
-            ctrl, "■  STOP", RED, RED_DARK, self._stop,
-            font=("Segoe UI", 11, "bold"), width=10, pady=6,
-        ).pack(side="left")
-        self.status_label = tk.Label(
-            ctrl, text="—", bg=PANEL, fg=FG_DIM, font=("Segoe UI", 9, "bold"), padx=12, pady=4
-        )
-        self.status_label.pack(side="left", padx=14)
-
-        log_card, log_body = self._card_frame(main, "LOG")
-        log_card.pack(fill="both", expand=True)
-        top = tk.Frame(log_body, bg=PANEL)
+        # tab 3: log
+        tab_log = tk.Frame(self.notebook, bg=CARD)
+        self.notebook.add(tab_log, text="📜  Log")
+        logwrap = tk.Frame(tab_log, bg=CARD)
+        logwrap.pack(fill="both", expand=True, padx=10, pady=(8, 10))
+        top = tk.Frame(logwrap, bg=CARD)
         top.pack(fill="x")
         self._flat_button(
             top, "Bersihkan", "#3a3a58", "#2e2e45", self._clear_log, font=("Segoe UI", 8)
         ).pack(side="right")
-        logwrap = tk.Frame(log_body, bg=PANEL)
-        logwrap.pack(fill="both", expand=True, pady=(4, 0))
-        scroll = tk.Scrollbar(logwrap, bg=PANEL, troughcolor=CARD, bd=0)
+        self._log_badge = tk.Label(
+            top, text="—", bg=CARD, fg=FG_FAINT, font=("Segoe UI", 8, "bold")
+        )
+        self._log_badge.pack(side="left")
+        scroll = tk.Scrollbar(logwrap, bg=CARD, troughcolor=PANEL, bd=0)
         scroll.pack(side="right", fill="y")
         self.log_text = tk.Text(
-            logwrap, height=11, state="disabled", wrap="none",
+            logwrap, height=10, state="disabled", wrap="none",
             bg="#0b0b14", fg="#c9c9dd", relief="flat", highlightthickness=0,
             font=("Consolas", 9), yscrollcommand=scroll.set,
         )
-        self.log_text.pack(fill="both", expand=True)
+        self.log_text.pack(fill="both", expand=True, pady=(4, 0))
         scroll.config(command=self.log_text.yview)
         self.log_text.tag_configure("err", foreground="#ff8a8a")
         self.log_text.tag_configure("ok", foreground="#7dffb8")
         self.log_text.tag_configure("warn", foreground="#ffd27d")
         self.log_text.tag_configure("head", foreground=AMBER)
+
+        # ---------------- kontrol (selalu terlihat) ----------------
+        ctrl = tk.Frame(main, bg=BG)
+        ctrl.pack(fill="x", pady=(6, 0))
+        self._flat_button(ctrl, "💾 Simpan", BLUE, BLUE_DARK, self._save_current).pack(side="left")
+        self._flat_button(
+            ctrl, "▶  START", GREEN, GREEN_DARK, self._start,
+            font=("Segoe UI", 10, "bold"), width=10, pady=5,
+        ).pack(side="left", padx=6)
+        self._flat_button(
+            ctrl, "■  STOP", RED, RED_DARK, self._stop,
+            font=("Segoe UI", 10, "bold"), width=8, pady=5,
+        ).pack(side="left")
+        self.status_label = tk.Label(
+            ctrl, text="—", bg=PANEL, fg=FG_DIM, font=("Segoe UI", 9, "bold"), padx=10, pady=3
+        )
+        self.status_label.pack(side="left", padx=12)
 
     # -- dialog gelap ---------------------------------------------------------
     def _dialog(self, title, prompt, buttons, entry=False, initial="") -> object:
@@ -410,24 +433,25 @@ class App:
             self.acc_inner, bg=card_bg, cursor="hand2",
             highlightthickness=1, highlightbackground=(AMBER if selected else BORDER),
         )
-        card.pack(fill="x", padx=4, pady=3)
+        card.pack(fill="x", padx=3, pady=2)
         bar = tk.Frame(card, bg=(AMBER if selected else card_bg), width=3)
         bar.pack(side="left", fill="y")
         inner = tk.Frame(card, bg=card_bg)
-        inner.pack(side="left", fill="x", expand=True, padx=8, pady=5)
+        inner.pack(side="left", fill="x", expand=True, padx=7, pady=4)
+        widgets = [card, bar, inner]
         row1 = tk.Frame(inner, bg=card_bg)
         row1.pack(fill="x")
-        widgets = [card, bar, inner, row1]
-        widgets.append(tk.Label(row1, text="●", fg=dot, bg=card_bg, font=("Segoe UI", 9)))
+        widgets.append(row1)
+        widgets.append(tk.Label(row1, text="●", fg=dot, bg=card_bg, font=("Segoe UI", 8)))
         widgets[-1].pack(side="left")
         widgets.append(
-            tk.Label(row1, text=name, fg=FG, bg=card_bg, font=("Segoe UI", 10, "bold"), anchor="w")
+            tk.Label(row1, text=name, fg=FG, bg=card_bg, font=("Segoe UI", 9, "bold"), anchor="w")
         )
-        widgets[-1].pack(side="left", padx=(5, 0))
+        widgets[-1].pack(side="left", padx=(4, 0))
         status_text = self.status.get(name, "")
         if status_text:
             widgets.append(
-                tk.Label(row1, text=status_text[:16], fg=dot, bg=card_bg, font=("Segoe UI", 7))
+                tk.Label(row1, text=status_text[:14], fg=dot, bg=card_bg, font=("Segoe UI", 7))
             )
             widgets[-1].pack(side="right")
         device = ""
@@ -435,17 +459,26 @@ class App:
             device = str(profiles.load_profile(name).get("device_address", ""))
         except Exception:  # noqa: BLE001
             pass
-        row2 = tk.Frame(inner, bg=card_bg)
-        row2.pack(fill="x", padx=(14, 0))
-        widgets.append(row2)
         widgets.append(
-            tk.Label(row2, text=device, fg=FG_DIM, bg=card_bg, font=("Segoe UI", 8), anchor="w")
+            tk.Label(inner, text=device, fg=FG_DIM, bg=card_bg, font=("Segoe UI", 7), anchor="w")
         )
-        widgets[-1].pack(anchor="w")
+        widgets[-1].pack(fill="x", padx=(12, 0))
         for widget in widgets:
             widget.bind("<Button-1>", lambda _e, n=name: self._select_account(n))
-            widget.bind("<Enter>", lambda _e, w=widgets: [x.config(bg=CARD_HOVER) for x in w if x.cget("bg") == SIDEBAR or x.cget("bg") == CARD])
-            widget.bind("<Leave>", lambda _e, w=widgets: [x.config(bg=(CARD if selected else SIDEBAR)) for x in w if x.cget("bg") == CARD_HOVER])
+            widget.bind(
+                "<Enter>",
+                lambda _e, ws=widgets: [
+                    w.config(bg=CARD_HOVER) for w in ws if w.cget("bg") in (SIDEBAR, CARD)
+                ],
+            )
+            widget.bind(
+                "<Leave>",
+                lambda _e, ws=widgets: [
+                    w.config(bg=(CARD if selected else SIDEBAR))
+                    for w in ws
+                    if w.cget("bg") == CARD_HOVER
+                ],
+            )
 
     def _select_account(self, name: str) -> None:
         self.selected = name
@@ -475,6 +508,8 @@ class App:
         else:
             color = STATUS_COLORS.get(kind, FG_DIM)
             self.status_label.config(text=text, bg=color, fg="#10101c")
+        if hasattr(self, "_log_badge"):
+            self._log_badge.config(text=text, fg=STATUS_COLORS.get(kind, FG_FAINT))
 
     # -- aksi profil ----------------------------------------------------------
     def _add_profile(self) -> None:
@@ -687,7 +722,6 @@ class App:
                 elif "WARNING" in upper:
                     tag = ("warn",)
                 self.log_text.configure(state="normal")
-                self.log_text.insert("end", f"", ())
                 self.log_text.insert("end", f"[{name}] ", ("head",))
                 self.log_text.insert("end", f"{msg}\n", tag)
                 self.log_text.see("end")
