@@ -243,17 +243,44 @@ class _Session:
         return False
 
     def _army_ready(self) -> bool:
-        """False when the dragon badge shows an (almost) empty deck."""
+        """Bandingkan jumlah dragon di deck dengan simpanan bot (army.dragon_drops)."""
         shot = self._capture("army_check.png")
         if shot is None:
             return True
         crop = self.deps.crop_percent(self._img(shot), *self.cfg.army_badge_roi)
         value = self.deps.read_badge(crop)
+        expected = int(self.cfg.army.get("dragon_drops", 0))
         if value is None:
             logger.info("Badge pasukan tak terbaca; anggap siap")
             return True
-        logger.info("Cek pasukan: dragon x%d", value)
+        logger.info("Cek pasukan: dragon x%d (harap x%d)", value, expected)
+        if expected > 0:
+            return value >= expected
         return value >= 2
+
+    def _train_army(self) -> bool:
+        """Klik urutan latih tersimpan (buka Army -> resep -> Train -> tutup) lalu tunggu."""
+        if not self.cfg.train_points:
+            logger.info("train_points kosong - latih pasukan manual lalu start lagi")
+            return False
+        logger.info("Melatih pasukan otomatis (%d klik)", len(self.cfg.train_points))
+        for xp, yp in self.cfg.train_points:
+            if self.deps.should_stop():
+                return False
+            self.actions.tap_percent(xp, yp)
+            self.deps.sleep(1.2)
+        total = self.cfg.train_wait_s
+        if total <= 0:
+            return True
+        logger.info("Latihan diantrekan - tunggu sampai %d detik", total)
+        waited = 0
+        while waited < total:
+            if self.deps.should_stop():
+                return False
+            step = min(30, total - waited)
+            self.deps.sleep(step)
+            waited += step
+        return True
 
     # -- steps -----------------------------------------------------------
 
@@ -456,14 +483,12 @@ class _Session:
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
         if not self._army_ready():
-            logger.warning(
-                "Pasukan kosong — end battle & berhenti (latih ulang lalu start lagi)"
-            )
+            logger.warning("Pasukan tidak sesuai simpanan bot - end battle utk latih ulang")
             self.actions.tap_percent(*self.cfg.end_battle_point)
             self.deps.sleep(0.2)
             self.actions.tap_percent(*self.cfg.confirm_point)
             self.deps.sleep(2)
-            return StepResult(False, "army_empty")
+            return StepResult(False, "army_mismatch")
         strategies: list = []
         try:
             strategies = self.deps.load_strategies(self.cfg.strategy_file)
@@ -661,7 +686,7 @@ class _Session:
 
     # -- cycle -----------------------------------------------------------
 
-    def run_cycle(self) -> StepResult:
+    def run_cycle(self, train_attempts: int = 0) -> StepResult:
         if self.deps.should_stop():
             return StepResult(False, "stopped by user")
         result = self.find_attack()
@@ -693,6 +718,14 @@ class _Session:
 
         result = self.attack()
         if not result.ok:
+            if (
+                result.reason == "army_mismatch"
+                and self.cfg.train_points
+                and train_attempts < 1
+            ):
+                if self._train_army():
+                    logger.info("Pasukan dilatih ulang - ulang siklus")
+                    return self.run_cycle(train_attempts + 1)
             return result
         result = self.return_home()
         if result.ok and self.cfg.wall_upgrade.enabled:
@@ -732,8 +765,10 @@ def run(
             if not result.ok:
                 if result.reason == "de_full":
                     return RunSummary(True, done, "DE penuh — bot berhenti")
-                if result.reason == "army_empty":
-                    return RunSummary(True, done, "pasukan habis — latih ulang & start lagi")
+                if result.reason == "army_mismatch":
+                    return RunSummary(
+                        True, done, "pasukan tidak sesuai - latih manual / isi train_points"
+                    )
                 return RunSummary(False, done, result.reason)
             done += 1
     except (AdbError, ValueError, OSError) as exc:

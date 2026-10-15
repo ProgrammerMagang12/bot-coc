@@ -417,7 +417,7 @@ def test_de_full_stops_and_closes_coc(tmp_path):
     assert adb.taps == []  # berhenti sebelum menyerang
 
 
-def test_army_empty_stops_attack():
+def test_army_mismatch_stops_when_no_train_points():
     states = []
     deps, adb = make_deps(full_script(), states)
     deps.read_badge = lambda img: 1
@@ -425,6 +425,24 @@ def test_army_empty_stops_attack():
     assert summary.ok and "pasukan" in summary.reason
     end_battle = (int(0.065 * 1600), int(0.75 * 900))
     assert end_battle in adb.taps  # langsung end battle, tidak deploy
+
+
+def test_army_mismatch_trains_then_retries(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["train_points"] = [[0.1, 0.1], [0.2, 0.2]]
+    data["train_wait_s"] = 0
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    badges = iter([1, 13])  # pertama mismatch; setelah dilatih siap
+    deps.read_badge = lambda img: next(badges)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and summary.cycles_done == 1
+    assert (int(0.1 * 1600), int(0.1 * 900)) in adb.taps  # klik latih
+    assert (int(0.2 * 1600), int(0.2 * 900)) in adb.taps
 
 
 def test_collect_points_tapped_at_home(tmp_path):

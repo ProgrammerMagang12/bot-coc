@@ -49,6 +49,8 @@
   "army_badge_roi": [0.070, 0.835, 0.140, 0.895],
   "coc_package": "com.supercell.clashofclans",
   "collect_points": [],
+  "train_points": [],
+  "train_wait_s": 600,
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,

@@ -72,6 +72,8 @@ class Config:
     army_badge_roi: list[float]
     coc_package: str
     collect_points: list[list[float]]
+    train_points: list[list[float]]
+    train_wait_s: int
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -278,6 +280,13 @@ def load_config(path: str | Path) -> Config:
     collect_points = [
         _point(pair, f"collect_points[{i}]") for i, pair in enumerate(collect_raw)
     ]
+    train_raw = data.get("train_points", [])
+    if not isinstance(train_raw, list):
+        raise ConfigError("train_points: expected a list of [x, y] pairs")
+    train_points = [
+        _point(pair, f"train_points[{i}]") for i, pair in enumerate(train_raw)
+    ]
+    train_wait_s = _nonneg_int(data.get("train_wait_s", 600), "train_wait_s")
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -334,6 +343,8 @@ def load_config(path: str | Path) -> Config:
         army_badge_roi=army_badge_roi,
         coc_package=coc_package,
         collect_points=collect_points,
+        train_points=train_points,
+        train_wait_s=train_wait_s,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,
