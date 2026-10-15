@@ -313,6 +313,35 @@ def test_battle_wait_normal_end_when_results_appear_late():
     assert summary.ok
     assert end_battle in adb.taps
     assert (int(0.614 * 1600), int(0.648 * 900)) in adb.taps
+    # hero skills ditap pada t=8/30/60 → 2 titik x 3 delay
+    assert adb.taps.count((int(0.404 * 1600), int(0.76 * 900))) == 3
+    assert adb.taps.count((int(0.445 * 1600), int(0.76 * 900))) == 3
+
+
+def test_disconnect_popup_taps_reload():
+    from coclab.loop import _Session
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.ocr_boxes = lambda img: [("Anyone there?", 575, 187), ("RELOAD GAME", 280, 407)]
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
+    assert session._handle_disconnected(None) is True
+    assert (280, 407) in adb.taps
+
+
+def test_no_disconnect_returns_false():
+    from coclab.loop import _Session
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.ocr_boxes = lambda img: [("Available Loot:", 100, 100)]
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
+    assert session._handle_disconnected(None) is False
+    assert adb.taps == []
 
 
 def test_army_counts_cycle_strategy_points(tmp_path):

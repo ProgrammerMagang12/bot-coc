@@ -268,7 +268,12 @@ class App:
             else:
                 line = f"<<< FAILED: {summary.reason}"
             log_queue.put((name, line))
-            self.status[name] = "OK ✓" if summary.ok else f"gagal: {summary.reason}"
+            if summary.ok:
+                self.status[name] = "OK ✓"
+            elif summary.reason == "stopped by user":
+                self.status[name] = "dihentikan ■"
+            else:
+                self.status[name] = f"gagal: {summary.reason}"
         except Exception as exc:  # noqa: BLE001
             log_queue.put((name, f"<<< ERROR: {exc}"))
             self.status[name] = "error"

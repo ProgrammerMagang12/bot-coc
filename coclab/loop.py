@@ -44,6 +44,7 @@ class Deps:
     ocr_digits: Callable[..., int | None]
     read_loot: Callable[..., int | None]
     should_stop: Callable[..., bool]
+    ocr_boxes: Callable[..., list]
     actions_factory: Callable[..., object]
     load_strategies: Callable[[str], list]
     sleep: Callable[[float], None]
@@ -64,6 +65,7 @@ def _default_deps(config: Config) -> Deps:
         ocr_digits=vision.ocr_digits,
         read_loot=digits.read_loot_number,
         should_stop=_never_stop,
+        ocr_boxes=vision.ocr_text_boxes,
         actions_factory=Actions,
         load_strategies=load_strategies_default,
         sleep=time.sleep,
@@ -115,6 +117,27 @@ class _Session:
             logger.info("Template %s unreadable (%s); skipped", template, exc)
             return vision.Match(False, 0, 0, 0.0)
 
+    def _handle_disconnected(self, shot: Path) -> bool:
+        """'Anyone there? RELOAD GAME' popup: tap RELOAD and wait for the game to return."""
+        try:
+            boxes = self.deps.ocr_boxes(self._img(shot))
+        except Exception as exc:  # noqa: BLE001 - OCR must never crash the loop
+            logger.info("Disconnect OCR failed: %s", exc)
+            return False
+        for text, cx, cy in boxes:
+            upper = str(text).upper()
+            if "RELOAD" in upper:
+                self.actions.tap_px(cx, cy)
+                logger.warning("Inactivity popup: tap RELOAD GAME, waiting for reload")
+                self.deps.sleep(15)
+                return True
+            if "DISCONNECTED" in upper:
+                self.actions.tap_percent(*self.cfg.reload_game_point)
+                logger.warning("Inactivity popup: tap reload point, waiting for reload")
+                self.deps.sleep(15)
+                return True
+        return False
+
     # -- steps -----------------------------------------------------------
 
     def connect(self) -> StepResult:
@@ -140,9 +163,13 @@ class _Session:
     def find_attack(self) -> StepResult:
         self._state(BotState.FIND_ATTACK)
         for _ in range(_FIND_ATTACK_TRIES):
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
             shot = self._capture("screen.png")
             if shot is None:
                 return StepResult(False, "attack screen capture failed")
+            if self._handle_disconnected(shot):
+                continue
             match = self._match(shot, "attack.png")
             if match.found:
                 logger.info("Attack button found (score %.2f)", match.score)
@@ -152,32 +179,38 @@ class _Session:
 
     def matchmaking(self) -> StepResult:
         self._state(BotState.MATCHMAKING)
-        shot = self._capture("matchmaking.png")
-        if shot is None:
-            return StepResult(False, "matchmaking capture failed")
-        match = self._match(shot, "find_match.png")
-        if match.found:
-            self.actions.tap_px(match.cx, match.cy)
-            logger.info("Click Find Match")
-            self.deps.sleep(1.0)
-            confirm_shot = self._capture("matchmaking_confirm.png")
-            if confirm_shot is not None:
-                confirm = self._match_safe(confirm_shot, "attack2.png")
-                if confirm.found:
-                    self.actions.tap_px(confirm.cx, confirm.cy)
-                    logger.info("Click Attack (confirm)")
-                    self.deps.sleep(1.0)
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
+        clicked = False
         while True:
-            shot = self._capture("searching.png")
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
+            shot = self._capture("matchmaking.png")
             if shot is None:
-                return StepResult(False, "search screen capture failed")
+                return StepResult(False, "matchmaking capture failed")
+            if self._handle_disconnected(shot):
+                continue
+            if not clicked:
+                match = self._match(shot, "find_match.png")
+                if match.found:
+                    self.actions.tap_px(match.cx, match.cy)
+                    logger.info("Click Find Match")
+                    self.deps.sleep(1.0)
+                    confirm_shot = self._capture("matchmaking_confirm.png")
+                    if confirm_shot is not None:
+                        confirm = self._match_safe(confirm_shot, "attack2.png")
+                        if confirm.found:
+                            self.actions.tap_px(confirm.cx, confirm.cy)
+                            logger.info("Click Attack (confirm)")
+                            self.deps.sleep(1.0)
+                    clicked = True
+                    continue
             if self._match_safe(shot, "next.png").found:
                 logger.info("Opponent found (Next button visible)")
                 return StepResult(True)
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "opponent search timeout")
-            logger.info("Searching opponent...")
+            if clicked:
+                logger.info("Searching opponent...")
             self.deps.sleep(2)
 
     def _read_once(self, roi: list[float]) -> int | None:
@@ -348,20 +381,28 @@ class _Session:
             logger.info("Speed up x%d", 2 ** self.cfg.speed_up_taps)
 
         logger.info("Waiting up to %d s for battle end", self.cfg.end_delay_s)
+        hero_delays = set(self.cfg.hero_skill_delays_s)
         ended_early = False
         for second in range(max(self.cfg.end_delay_s, 1)):
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             self.deps.sleep(1)
+            if second in hero_delays and self.cfg.hero_skill_points:
+                for xp, yp in self.cfg.hero_skill_points:
+                    self.actions.tap_percent(xp, yp)
+                logger.info("Trigger hero skills (t=%ds)", second)
             if second % 5 == 4:
                 shot = self._capture("battle_end.png")
-                if shot is not None and (
-                    self._match_safe(shot, "returnhome.png").found
-                    or self._match_safe(shot, "claim_reward.png").found
-                ):
-                    ended_early = True
-                    logger.info("Battle ended early (results screen visible)")
-                    break
+                if shot is not None:
+                    if self._handle_disconnected(shot):
+                        continue
+                    if (
+                        self._match_safe(shot, "returnhome.png").found
+                        or self._match_safe(shot, "claim_reward.png").found
+                    ):
+                        ended_early = True
+                        logger.info("Battle ended early (results screen visible)")
+                        break
         if not ended_early:
             self.actions.tap_percent(*self.cfg.end_battle_point)
             logger.info("Click End Battle")
@@ -437,6 +478,8 @@ class _Session:
                 self.actions.tap_percent(*self.cfg.return_home_point)
                 logger.info("Tap Return Home")
             else:
+                if self._handle_disconnected(shot):
+                    continue
                 self.actions.tap_percent(*self.cfg.star_bonus_point)
                 logger.info("Tap popup Okay (star bonus point)")
                 self.deps.sleep(2.0)
@@ -488,6 +531,8 @@ class _Session:
         self.deps.sleep(1.0)
 
         for _ in range(_MAX_LOOT_ROUNDS):
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
             result = self.matchmaking()
             if not result.ok:
                 return result

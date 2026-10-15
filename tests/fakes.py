@@ -62,6 +62,7 @@ def make_deps(script, states):
         ocr_digits=lambda img, engine=None: 999999,
         read_loot=lambda img: 999999,
         should_stop=lambda: False,
+        ocr_boxes=lambda img: [],
         actions_factory=lambda a, d, m, s: FakeActions(a, d, m, s),
         load_strategies=lambda path: [],
         sleep=lambda s: None,
