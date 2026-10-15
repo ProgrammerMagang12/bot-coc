@@ -70,3 +70,20 @@ def rename_profile(old: str, new: str, directory: Path = PROFILES_DIR) -> Path:
         raise FileExistsError(f"profil '{new}' sudah ada")
     old_path.rename(new_path)
     return new_path
+
+
+def ldplayer_index_for_address(device_address: str) -> int | None:
+    """Index instance LDPlayer dari alamat adb (port = 5555 + 2*index).
+
+    Contoh: 127.0.0.1:5559 -> index 2. None bila bukan pola LDPlayer.
+    """
+    try:
+        host, port_s = str(device_address).rsplit(":", 1)
+        port = int(port_s)
+    except (ValueError, AttributeError):
+        return None
+    if not host.startswith("127.0.0.1"):
+        return None
+    if port < 5555 or (port - 5555) % 2 != 0:
+        return None
+    return (port - 5555) // 2

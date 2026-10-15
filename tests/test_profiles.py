@@ -47,3 +47,12 @@ def test_rename_profile_conflict(tmp_path):
 
     with pytest.raises(FileExistsError):
         profiles.rename_profile("a", "b", tmp_path)
+
+
+def test_ldplayer_index_from_port():
+    assert profiles.ldplayer_index_for_address("127.0.0.1:5555") == 0
+    assert profiles.ldplayer_index_for_address("127.0.0.1:5557") == 1
+    assert profiles.ldplayer_index_for_address("127.0.0.1:5559") == 2
+    assert profiles.ldplayer_index_for_address("127.0.0.1:5560") is None  # pola ganjil saja
+    assert profiles.ldplayer_index_for_address("emulator-5554") is None
+    assert profiles.ldplayer_index_for_address("192.168.1.5:5555") is None

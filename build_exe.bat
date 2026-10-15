@@ -2,7 +2,8 @@
 REM ============================================================
 REM  Build GARUDA.exe (Windows) — jalankan dari folder coc-lab:
 REM      build_exe.bat
-REM  Hasil: dist\GARUDA\GARUDA.exe (+ file data di sampingnya)
+REM  Profil akun & config.json milikmu di dist\GARUDA AMAN:
+REM  otomatis di-backup sebelum build dan dipulihkan setelahnya.
 REM ============================================================
 cd /d "%~dp0"
 
@@ -14,7 +15,14 @@ if not errorlevel 1 (
   timeout /t 2 /nobreak >nul
 )
 
-echo [1/3] Membangun EXE dengan PyInstaller...
+echo [1/4] Backup data user (profiles + config.json) dari dist\GARUDA...
+if exist dist\GARUDA\profiles (
+  if not exist dist\_userdata\profiles mkdir dist\_userdata\profiles
+  xcopy /E /I /Y dist\GARUDA\profiles dist\_userdata\profiles >nul
+)
+if exist dist\GARUDA\config.json copy /Y dist\GARUDA\config.json dist\_userdata\config.json >nul
+
+echo [2/4] Membangun EXE dengan PyInstaller...
 py -m PyInstaller --noconfirm --clean --windowed --name GARUDA ^
   --collect-all rapidocr_onnxruntime --collect-all onnxruntime ^
   gui.py
@@ -25,16 +33,16 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Menyalin file data (config, assets, strategi)...
-if exist config.json copy /Y config.json dist\GARUDA\ >nul
+echo [3/4] Menyalin file data default...
 copy /Y config.example.json dist\GARUDA\ >nul
 copy /Y AttackStrategies.json dist\GARUDA\ >nul
 xcopy /E /I /Y assets dist\GARUDA\assets >nul
 
 echo.
-echo [3/3] Selesai!
+echo [4/4] Memulihkan data user (profiles + config.json)...
+if exist dist\_userdata\profiles xcopy /E /I /Y dist\_userdata\profiles dist\GARUDA\profiles >nul
+if exist dist\_userdata\config.json copy /Y dist\_userdata\config.json dist\GARUDA\config.json >nul
+
 echo.
-echo  Jalankan:  dist\GARUDA\GARUDA.exe
-echo  Catatan: file data (assets/ config.json AttackStrategies.json) tetap
-echo  di samping exe — kalibrasi template tetap bisa tanpa rebuild.
+echo Selesai!  Jalankan:  dist\GARUDA\GARUDA.exe
 pause

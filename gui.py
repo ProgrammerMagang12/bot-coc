@@ -590,6 +590,10 @@ class App:
                 raw = self.army_vars[key].get().strip()
                 if raw:
                     army[key] = int(raw)
+            if "ldconsole" in str(data.get("emulator_path", "")).lower():
+                index = profiles.ldplayer_index_for_address(data.get("device_address", ""))
+                if index is not None:
+                    data["emulator_args"] = ["launch", "--index", str(index)]
             profiles.save_profile(name, data)
             self.status_label.config(text="tersimpan ✓", bg=GREEN, fg="#10101c")
         except (ValueError, ConfigError) as exc:
@@ -637,6 +641,10 @@ class App:
             log_queue.put((name, "Device offline & File emulator kosong — isi di pengaturan."))
             return False
         cmd = [cfg.emulator_path, *cfg.emulator_args]
+        if "ldconsole" in str(cfg.emulator_path).lower():
+            index = profiles.ldplayer_index_for_address(cfg.device_address)
+            if index is not None:
+                cmd = [cfg.emulator_path, "launch", "--index", str(index)]
         log_queue.put((name, f"Emulator belum jalan — menjalankan: {' '.join(cmd)}"))
         try:
             subprocess.Popen(cmd)  # noqa: S603 - path dari config user sendiri
