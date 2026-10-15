@@ -212,12 +212,19 @@ class App:
             return
         try:
             data = profiles.load_profile(name)
+            template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+            if isinstance(template, dict):
+                filled = profiles.merge_missing(data, template)
+                if filled:
+                    log_queue.put((name, f"Profil diperbarui otomatis: {filled} setting baru"))
             for key, _label in FORM_FIELDS:
                 raw = self.form_vars[key].get().strip()
                 if key in ("device_address", "emulator_path"):
                     data[key] = raw
-                else:
-                    data[key] = int(raw)
+                    continue
+                if raw == "":
+                    continue  # field kosong → biarkan nilai lama
+                data[key] = int(raw)
             army = data.setdefault("army", {})
             for key, _label in ARMY_FIELDS:
                 raw = self.army_vars[key].get().strip()

@@ -46,3 +46,13 @@ def save_profile(name: str, data: dict, directory: Path = PROFILES_DIR) -> Path:
 def create_from_template(name: str, template: Path, directory: Path = PROFILES_DIR) -> Path:
     data = json.loads(Path(template).read_text(encoding="utf-8"))
     return save_profile(name, data, directory)
+
+
+def merge_missing(data: dict, template: dict) -> int:
+    """Fill keys missing in `data` from `template`; returns how many were filled."""
+    filled = 0
+    for key, value in template.items():
+        if key not in data:
+            data[key] = value
+            filled += 1
+    return filled

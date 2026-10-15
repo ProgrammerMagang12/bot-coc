@@ -22,3 +22,12 @@ def test_list_profiles_creates_dir(tmp_path):
     target = tmp_path / "sub"
     assert profiles.list_profiles(target) == []
     assert target.is_dir()
+
+
+def test_merge_missing_fills_new_fields():
+    data = {"min_gold": 1}
+    template = {"min_gold": 2, "de_full_value": 300000, "coc_package": "x"}
+    filled = profiles.merge_missing(data, template)
+    assert filled == 2
+    assert data["min_gold"] == 1  # yang sudah ada tidak ditimpa
+    assert data["de_full_value"] == 300000
