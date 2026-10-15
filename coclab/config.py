@@ -286,7 +286,7 @@ def load_config(path: str | Path) -> Config:
     train_points = [
         _point(pair, f"train_points[{i}]") for i, pair in enumerate(train_raw)
     ]
-    train_wait_s = _nonneg_int(data.get("train_wait_s", 10), "train_wait_s")
+    train_wait_s = _nonneg_int(data.get("train_wait_s", 5), "train_wait_s")
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")

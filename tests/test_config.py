@@ -156,7 +156,7 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.coc_package == "com.supercell.clashofclans"
     assert cfg.collect_points == []
     assert cfg.train_points == []
-    assert cfg.train_wait_s == 10
+    assert cfg.train_wait_s == 5
     assert cfg.army == {
         "dragon_drops": 13,
         "balloon_drops": 18,
