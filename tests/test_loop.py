@@ -56,3 +56,36 @@ def test_return_home_timeout_stops():
     deps.monotonic = lambda: t.__setitem__(0, t[0] + 10) or t[0]  # +10s tiap panggilan
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert not summary.ok and "timeout" in summary.reason.lower()
+
+
+def test_run_reports_clean_failure_when_wm_size_fails():
+    from coclab.adb import AdbError
+
+    deps, _ = make_deps(full_script(), [])
+
+    def boom(_device):
+        raise AdbError("adb command failed (rc=1): wm size")
+
+    deps.adb.wm_size = boom
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "wm size" in summary.reason
+
+
+def test_run_reports_clean_failure_when_template_missing():
+    deps, _ = make_deps(full_script(), [])
+
+    def boom(_img, _tpl, _threshold):
+        raise ValueError("cannot read image: assets\\attack.png")
+
+    deps.find_template = boom
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "attack.png" in summary.reason
+
+
+def test_observe_mode_never_taps_end_to_end():
+    from coclab.actions import Actions
+
+    deps, adb = make_deps(full_script(), [])
+    deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and adb.taps == []

@@ -34,3 +34,27 @@ def test_keyboard_interrupt_returns_130(monkeypatch):
 def test_missing_config_returns_1(monkeypatch, capsys):
     assert cli.main(["--config", "tidak-ada.json"]) == 1
     assert "config.example.json" in capsys.readouterr().err  # Review Focus #3
+
+
+def test_observe_flag_is_accepted():
+    a = cli.build_parser().parse_args(["--observe"])
+    assert a.live is False and a.observe is True
+
+
+def test_observe_and_live_are_mutually_exclusive():
+    import pytest
+
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["--observe", "--live"])
+
+
+def test_main_default_mode_is_observe(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        cli,
+        "_run_loop",
+        lambda cfg, mode, cycles: captured.update(mode=mode)
+        or type("S", (), {"ok": True, "reason": "", "cycles_done": 1})(),
+    )
+    assert cli.main(["--config", "config.example.json"]) == 0
+    assert captured["mode"] == "observe"

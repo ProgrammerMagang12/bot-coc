@@ -88,3 +88,27 @@ def test_ocr_digits_real_engine_is_lazy_when_unavailable(monkeypatch):
 
     monkeypatch.setattr(vision, "_load_default_engine", lambda: None)
     assert vision.ocr_digits(np.zeros((10, 10, 3), np.uint8)) is None
+
+
+def test_default_engine_created_once(monkeypatch):
+    from coclab import vision
+
+    monkeypatch.setattr(vision, "_engine_cache", [])
+    calls = {"n": 0}
+
+    def fake_create():
+        calls["n"] += 1
+        return lambda _img: "1"
+
+    monkeypatch.setattr(vision, "_try_create_engine", fake_create, raising=False)
+    assert vision.ocr_digits(None) == 1
+    assert vision.ocr_digits(None) == 1
+    assert calls["n"] == 1
+
+
+def test_ocr_digits_multiple_number_groups_return_none():
+    assert ocr_digits(None, engine=lambda _i: "1,250 3,400") is None
+
+
+def test_ocr_digits_single_number_with_label_prefix():
+    assert ocr_digits(None, engine=lambda _i: "Loot: 1,250") == 1250

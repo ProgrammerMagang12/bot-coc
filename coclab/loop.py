@@ -247,7 +247,7 @@ class _Session:
 
 
 def run(config: Config, mode: str, cycles: int, deps: Deps | None = None) -> RunSummary:
-    """Run `cycles` full bot cycles. Returns a RunSummary (never raises for step errors)."""
+    """Run `cycles` full bot cycles. Step-level failures come back as a RunSummary."""
     if deps is None:
         deps = _default_deps(config)
     session = _Session(config, mode, deps)
@@ -255,15 +255,19 @@ def run(config: Config, mode: str, cycles: int, deps: Deps | None = None) -> Run
     result = session.connect()
     if not result.ok:
         return RunSummary(False, 0, result.reason)
-    result = session.prepare()
-    if not result.ok:
-        return RunSummary(False, 0, result.reason)
 
     done = 0
-    for _ in range(cycles):
-        result = session.run_cycle()
+    try:
+        result = session.prepare()
         if not result.ok:
-            return RunSummary(False, done, result.reason)
-        done += 1
+            return RunSummary(False, 0, result.reason)
+        for _ in range(cycles):
+            result = session.run_cycle()
+            if not result.ok:
+                return RunSummary(False, done, result.reason)
+            done += 1
+    except (AdbError, ValueError, OSError) as exc:
+        logger.error("Run aborted: %s", exc)
+        return RunSummary(False, done, str(exc))
     session._state(BotState.DONE)
     return RunSummary(True, done, "")

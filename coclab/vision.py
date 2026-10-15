@@ -67,8 +67,11 @@ def crop_percent(
     return img[py1:py2, px1:px2]
 
 
-def _load_default_engine() -> Callable[[np.ndarray], str] | None:
-    """Lazy-load rapidocr when installed; otherwise warn and disable OCR."""
+_engine_cache: list[Callable[[np.ndarray], str] | None] = []
+
+
+def _try_create_engine() -> Callable[[np.ndarray], str] | None:
+    """Load rapidocr when installed; otherwise warn and disable OCR."""
     try:
         from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-not-found]
     except ImportError:
@@ -86,6 +89,13 @@ def _load_default_engine() -> Callable[[np.ndarray], str] | None:
     return run
 
 
+def _load_default_engine() -> Callable[[np.ndarray], str] | None:
+    """Return the process-wide default engine, creating it at most once."""
+    if not _engine_cache:
+        _engine_cache.append(_try_create_engine())
+    return _engine_cache[0]
+
+
 def ocr_digits(
     img: np.ndarray | None, engine: Callable[[np.ndarray | None], str] | None = None
 ) -> int | None:
@@ -99,7 +109,17 @@ def ocr_digits(
     except Exception as exc:  # noqa: BLE001 - engine failures must not crash the loop
         logger.warning("OCR failed: %s", exc)
         return None
-    digits = "".join(ch for ch in text if ch.isdigit())
+    numeric_tokens = [
+        token for token in text.split() if any(ch.isdigit() for ch in token)
+    ]
+    if len(numeric_tokens) != 1:
+        logger.info(
+            "OCR: expected exactly one numeric field, found %d (raw=%r)",
+            len(numeric_tokens),
+            text,
+        )
+        return None
+    digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
     if not digits or len(digits) > _MAX_DIGITS:
         return None
     return int(digits)

@@ -18,10 +18,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Automation prototype for personal testing. Observe by default; --live for real taps.",
     )
     parser.add_argument("--config", default="config.json", help="path to config.json")
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--live",
         action="store_true",
         help="execute real taps (default: observe, no physical actions)",
+    )
+    mode_group.add_argument(
+        "--observe",
+        action="store_true",
+        help="explicitly select observe mode (no physical actions; this is the default)",
     )
     parser.add_argument("--cycles", type=int, default=1, help="number of full cycles")
     parser.add_argument("--device", default=None, help="override device_address from config")
