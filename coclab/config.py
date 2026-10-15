@@ -63,6 +63,7 @@ class Config:
     reload_game_point: list[float]
     hero_skill_points: list[list[float]]
     hero_skill_delays_s: list[int]
+    find_attack_timeout_s: int
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -234,13 +235,16 @@ def load_config(path: str | Path) -> Config:
     hero_skill_points = [
         _point(pair, f"hero_skill_points[{i}]") for i, pair in enumerate(skill_raw)
     ]
-    delays_raw = data.get("hero_skill_delays_s", [8, 30, 60])
+    delays_raw = data.get("hero_skill_delays_s", [5, 10, 15, 20, 30, 45, 60])
     if not isinstance(delays_raw, list):
         raise ConfigError("hero_skill_delays_s: expected a list of seconds")
     hero_skill_delays_s = [
         _nonneg_int(value, f"hero_skill_delays_s[{i}]")
         for i, value in enumerate(delays_raw)
     ]
+    find_attack_timeout_s = _positive_int(
+        data.get("find_attack_timeout_s", 60), "find_attack_timeout_s"
+    )
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -288,6 +292,7 @@ def load_config(path: str | Path) -> Config:
         reload_game_point=reload_game_point,
         hero_skill_points=hero_skill_points,
         hero_skill_delays_s=hero_skill_delays_s,
+        find_attack_timeout_s=find_attack_timeout_s,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,

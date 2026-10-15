@@ -313,9 +313,9 @@ def test_battle_wait_normal_end_when_results_appear_late():
     assert summary.ok
     assert end_battle in adb.taps
     assert (int(0.614 * 1600), int(0.648 * 900)) in adb.taps
-    # hero skills ditap pada t=8/30/60 → 2 titik x 3 delay
-    assert adb.taps.count((int(0.404 * 1600), int(0.76 * 900))) == 3
-    assert adb.taps.count((int(0.445 * 1600), int(0.76 * 900))) == 3
+    # hero skills ditap pada 7 delay (5..60 s) → 2 titik x 7
+    assert adb.taps.count((int(0.404 * 1600), int(0.76 * 900))) == 7
+    assert adb.taps.count((int(0.445 * 1600), int(0.76 * 900))) == 7
 
 
 def test_disconnect_popup_taps_reload():
@@ -342,6 +342,26 @@ def test_no_disconnect_returns_false():
     session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
     assert session._handle_disconnected(None) is False
     assert adb.taps == []
+
+
+def test_find_attack_retries_until_button_appears():
+    states = []
+    script = full_script()
+    script["attack.png"] = Match(False, 0, 0, 0.1)
+    deps, adb = make_deps(script, states)
+    calls = {"n": 0}
+    orig = deps.find_template
+
+    def find_template(img, tpl, threshold):
+        if Path(tpl).name == "attack.png":
+            calls["n"] += 1
+            if calls["n"] >= 4:
+                return Match(True, 700, 750, 0.95)
+        return orig(img, tpl, threshold)
+
+    deps.find_template = find_template
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok  # bot waiting + retry, tidak langsung menyerah
 
 
 def test_army_counts_cycle_strategy_points(tmp_path):

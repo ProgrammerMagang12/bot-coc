@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def _never_stop() -> bool:
     return False
 
-_FIND_ATTACK_TRIES = 3
+
 _MAX_LOOT_ROUNDS = 25
 
 
@@ -162,7 +162,8 @@ class _Session:
 
     def find_attack(self) -> StepResult:
         self._state(BotState.FIND_ATTACK)
-        for _ in range(_FIND_ATTACK_TRIES):
+        deadline = self.deps.monotonic() + self.cfg.find_attack_timeout_s
+        while True:
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             shot = self._capture("screen.png")
@@ -174,8 +175,18 @@ class _Session:
             if match.found:
                 logger.info("Attack button found (score %.2f)", match.score)
                 return StepResult(True, data={"px": match.cx, "py": match.cy})
-            self.deps.sleep(2)
-        return StepResult(False, "attack button not found after retries")
+            if (
+                self._match_safe(shot, "returnhome.png").found
+                or self._match_safe(shot, "claim_reward.png").found
+                or self._match_safe(shot, "continue.png").found
+            ):
+                logger.info("Not home yet (result dialogs visible); sweeping to home")
+                self._tap_until_home(max_rounds=6)
+                continue
+            if self.deps.monotonic() > deadline:
+                return StepResult(False, "attack button not found (timeout)")
+            logger.info("Attack button not visible yet; waiting...")
+            self.deps.sleep(3)
 
     def matchmaking(self) -> StepResult:
         self._state(BotState.MATCHMAKING)

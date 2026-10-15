@@ -1,4 +1,4 @@
-"""CROWZ LAB — GUI bot CoC (seperti CROWZ): atur loot minimum, Start/Stop, multi-instance.
+"""GARUDA — GUI bot CoC: atur loot minimum, Start/Stop, multi-instance.
 
 Jalankan:
     py gui.py
@@ -76,7 +76,7 @@ class _Instance:
 class App:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        root.title("CROWZ LAB — CoC Bot")
+        root.title("GARUDA — CoC Bot")
         root.geometry("860x620")
         self.instances: dict[str, _Instance] = {}
         self.form_vars: dict[str, tk.StringVar] = {}
