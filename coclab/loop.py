@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,7 @@ from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
 from coclab.config import Config
 from coclab.state import BotState, StepResult
+from coclab.strategy import load_strategies as load_strategies_default
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ class Deps:
     crop_percent: Callable[..., object]
     ocr_digits: Callable[..., int | None]
     actions_factory: Callable[..., object]
+    load_strategies: Callable[[str], list]
     sleep: Callable[[float], None]
     monotonic: Callable[[], float]
     state_hook: Callable[[str], None]
@@ -54,6 +57,7 @@ def _default_deps(config: Config) -> Deps:
         crop_percent=vision.crop_percent,
         ocr_digits=vision.ocr_digits,
         actions_factory=Actions,
+        load_strategies=load_strategies_default,
         sleep=time.sleep,
         monotonic=time.monotonic,
         state_hook=lambda name: logger.info("STATE %s", name),
@@ -212,14 +216,39 @@ class _Session:
             self.deps.sleep(2)
         return StepResult(False, "next button not found")
 
-    def attack(self) -> StepResult:
-        self._state(BotState.ATTACK)
-        self.actions.tap_percent(*self.cfg.drop_card_point)
-        logger.info("Select troop card")
+    def _drop_group(self, card_key: str, points: list) -> None:
+        if not points:
+            return
+        self.actions.tap_percent(*self.cfg.card_points[card_key])
+        logger.info("Select %s card", card_key)
         self.deps.sleep(0.5)
-        for xp, yp in self.cfg.drop_points:
+        for xp, yp in points:
             self.actions.tap_percent(xp, yp)
             self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+
+    def attack(self) -> StepResult:
+        self._state(BotState.ATTACK)
+        strategies: list = []
+        try:
+            strategies = self.deps.load_strategies(self.cfg.strategy_file)
+        except Exception as exc:  # noqa: BLE001 - fall back to the legacy drop
+            logger.warning("Strategy load failed (%s); using legacy single drop", exc)
+
+        if strategies:
+            chosen = random.choice(strategies)
+            logger.info("Executing Scenario: %s", chosen.name)
+            self._drop_group("dragon", chosen.dragon_drops)
+            self._drop_group("balloon", chosen.balloon_drops)
+            if chosen.wall_wrecker_drop is not None:
+                self._drop_group("wall_wrecker", [chosen.wall_wrecker_drop])
+        else:
+            logger.info("No strategies loaded; legacy single drop")
+            self.actions.tap_percent(*self.cfg.drop_card_point)
+            self.deps.sleep(0.5)
+            for xp, yp in self.cfg.drop_points:
+                self.actions.tap_percent(xp, yp)
+                self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+
         logger.info("Auto end in %d seconds", self.cfg.end_delay_s)
         self.deps.sleep(self.cfg.end_delay_s)
         self.actions.tap_percent(*self.cfg.end_battle_point)

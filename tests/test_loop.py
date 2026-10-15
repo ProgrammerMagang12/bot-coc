@@ -138,3 +138,46 @@ def test_live_attack_selects_troop_card_first():
     card = (int(0.251 * 1600), int(0.933 * 900))
     drop = (int(0.35 * 1600), int(0.72 * 900))  # dari config.example.json
     assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
+
+
+def test_multi_drop_attack_uses_strategy():
+    from coclab.actions import Actions
+    from coclab.strategy import Strategy
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="Test-A",
+            dragon_drops=[[0.30, 0.60], [0.32, 0.62]],
+            balloon_drops=[[0.34, 0.64]],
+            wall_wrecker_drop=[0.36, 0.66],
+        )
+    ]
+    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
+    assert summary.ok
+    expected_sequence = [
+        (int(0.251 * 1600), int(0.933 * 900)),  # kartu dragon
+        (int(0.30 * 1600), int(0.60 * 900)),
+        (int(0.32 * 1600), int(0.62 * 900)),
+        (int(0.328 * 1600), int(0.933 * 900)),  # kartu balloon
+        (int(0.34 * 1600), int(0.64 * 900)),
+        (int(0.39 * 1600), int(0.933 * 900)),   # kartu wall wrecker
+        (int(0.36 * 1600), int(0.66 * 900)),
+    ]
+    # taps: [0]=attack, [1]=find_match, [2]=attack2, lalu urutan serangan
+    assert adb.taps[3 : 3 + len(expected_sequence)] == expected_sequence
+
+
+def test_attack_falls_back_to_legacy_without_strategies():
+    from coclab.actions import Actions
+
+    deps, adb = make_deps(full_script(), [])
+    deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
+    deps.load_strategies = lambda path: []
+    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
+    assert summary.ok
+    legacy_card = (int(0.251 * 1600), int(0.933 * 900))
+    drop = (int(0.35 * 1600), int(0.72 * 900))
+    assert legacy_card in adb.taps and drop in adb.taps
