@@ -1,0 +1,56 @@
+import cv2
+import numpy as np
+import pytest
+
+from coclab.vision import find_template, is_valid_image, load_image
+
+
+def _canvas_with_block(cx, cy, size=24):
+    rng = np.random.default_rng(42)
+    img = rng.integers(0, 255, (200, 300, 3), dtype=np.uint8)  # tekstur: hindari window konstan
+    tpl = np.full((size, size, 3), (0, 0, 255), np.uint8)
+    tpl[: size // 4, : size // 4] = (255, 255, 255)  # marker: template tidak konstan
+    img[cy : cy + size, cx : cx + size] = tpl
+    return img, tpl
+
+
+def test_find_template_exact_position():
+    img, tpl = _canvas_with_block(120, 60)
+    m = find_template(img, tpl, 0.9)
+    assert m.found and m.score > 0.99
+    assert abs(m.cx - (120 + 12)) <= 1 and abs(m.cy - (60 + 12)) <= 1  # center
+
+
+def test_find_template_negative():
+    img, tpl = _canvas_with_block(120, 60)
+    other = np.full((24, 24, 3), (0, 255, 0), np.uint8)
+    other[: 6, : 6] = (255, 255, 255)
+    m = find_template(img, other, 0.9)
+    assert not m.found and m.score < 0.9
+
+
+def test_find_template_rejects_oversized_template():
+    img = np.zeros((50, 50, 3), np.uint8)
+    tpl = np.zeros((80, 80, 3), np.uint8)
+    m = find_template(img, tpl, 0.9)
+    assert not m.found and m.score == 0.0  # tidak boleh crash
+
+
+def test_is_valid_image_rejects_truncated(tmp_path):
+    img, _ = _canvas_with_block(10, 10)
+    ok = tmp_path / "ok.png"
+    cv2.imwrite(str(ok), img)
+    raw = ok.read_bytes()
+    bad = tmp_path / "bad.png"
+    bad.write_bytes(raw[: len(raw) // 3])
+    assert is_valid_image(ok) is True
+    assert is_valid_image(bad) is False  # Review Focus #2
+    assert is_valid_image(tmp_path / "missing.png") is False
+
+
+def test_load_image_returns_bgr_array(tmp_path):
+    img, _ = _canvas_with_block(10, 10)
+    p = tmp_path / "x.png"
+    cv2.imwrite(str(p), img)
+    arr = load_image(p)
+    assert arr.shape == (200, 300, 3)
