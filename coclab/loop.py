@@ -28,6 +28,10 @@ def _never_stop() -> bool:
     return False
 
 
+def _never_pause() -> bool:
+    return False
+
+
 _MAX_LOOT_ROUNDS = 25
 
 
@@ -56,6 +60,7 @@ class Deps:
     sleep: Callable[[float], None]
     monotonic: Callable[[], float]
     state_hook: Callable[[str], None]
+    is_paused: Callable[[], bool] = _never_pause
 
 
 def _default_deps(config: Config) -> Deps:
@@ -79,6 +84,7 @@ def _default_deps(config: Config) -> Deps:
         sleep=time.sleep,
         monotonic=time.monotonic,
         state_hook=lambda name: logger.info("STATE %s", name),
+        is_paused=_never_pause,
     )
 
 
@@ -135,6 +141,20 @@ class _Session:
             return match
         return self._match_safe(shot, "attack_event.png")
 
+    def _pause_gate(self) -> None:
+        """Bila pengguna menekan Pause: hentikan semua aksi sampai Resume/Stop.
+
+        Tidak melakukan tap/capture apa pun; cek Stop tiap 0,5 detik agar
+        tombol Stop tetap responsif saat pause.
+        """
+        if not self.deps.is_paused():
+            return
+        logger.info("PAUSED - menunggu Resume (aksi berhenti)")
+        while self.deps.is_paused() and not self.deps.should_stop():
+            self.deps.sleep(0.5)
+        if not self.deps.should_stop():
+            logger.info("Resumed - lanjut dari titik sebelumnya")
+
     def _handle_afk_reload(self, shot: Path) -> bool:
         """'Anyone there? RELOAD GAME' popup: tap RELOAD and wait for the game to return."""
         try:
@@ -174,6 +194,7 @@ class _Session:
                 self.cfg.another_device_wait_s,
             )
             waited = 0
+            self._pause_gate()
             while waited < self.cfg.another_device_wait_s and not self.deps.should_stop():
                 step = min(1.0, self.cfg.another_device_wait_s - waited)
                 self.deps.sleep(step)
@@ -273,6 +294,7 @@ class _Session:
             return
         logger.info("Collect resource (%d titik)", len(self.cfg.collect_points))
         for xp, yp in self.cfg.collect_points:
+            self._pause_gate()
             if self.deps.should_stop():
                 return
             self.actions.tap_percent(xp, yp)
@@ -423,6 +445,7 @@ class _Session:
         )
         rounds = 2 if has_clear else 1
         for _ in range(rounds):
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             if ui_ready and self._build_army():
@@ -515,6 +538,7 @@ class _Session:
             if count <= 0:
                 continue
             for _ in range(count):
+                self._pause_gate()
                 if self.deps.should_stop():
                     return False
                 self.actions.tap_percent(*point)
@@ -535,6 +559,7 @@ class _Session:
                 if count <= 0:
                     continue
                 for _ in range(count):
+                    self._pause_gate()
                     if self.deps.should_stop():
                         return False
                     self.actions.tap_percent(*point)
@@ -554,6 +579,7 @@ class _Session:
             return False
         logger.info("Melatih pasukan otomatis (%d klik)", len(self.cfg.train_points))
         for xp, yp in self.cfg.train_points:
+            self._pause_gate()
             if self.deps.should_stop():
                 return False
             self.actions.tap_percent(xp, yp)
@@ -564,6 +590,7 @@ class _Session:
         logger.info("Latihan diantrekan - tunggu sampai %d detik", total)
         waited = 0
         while waited < total:
+            self._pause_gate()
             if self.deps.should_stop():
                 return False
             step = min(30, total - waited)
@@ -598,6 +625,7 @@ class _Session:
         self._state(BotState.FIND_ATTACK)
         deadline = self.deps.monotonic() + self.cfg.find_attack_timeout_s
         while True:
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             shot = self._capture("screen.png")
@@ -632,6 +660,7 @@ class _Session:
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
         clicked = False
         while True:
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             if not self._ensure_coc():
@@ -964,6 +993,7 @@ class _Session:
         hero_delays = set(self.cfg.hero_skill_delays_s)
         ended_early = False
         for second in range(max(self.cfg.end_delay_s, 1)):
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             self.deps.sleep(1)
@@ -997,6 +1027,7 @@ class _Session:
         self._state(BotState.RETURN_HOME)
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
         while True:
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             if not self._ensure_coc():
@@ -1042,6 +1073,7 @@ class _Session:
         (star_bonus_point) and Notifications "Not Now" (notifications_not_now_point).
         """
         for _ in range(max_rounds):
+            self._pause_gate()
             if self.deps.should_stop():
                 return False
             shot = self._capture("until_home.png")
@@ -1105,6 +1137,7 @@ class _Session:
     # -- cycle -----------------------------------------------------------
 
     def run_cycle(self, train_attempts: int = 0, crash_attempts: int = 0) -> StepResult:
+        self._pause_gate()
         if self.deps.should_stop():
             return StepResult(False, "stopped by user")
         result = self.find_attack()
@@ -1141,6 +1174,7 @@ class _Session:
         self.deps.sleep(1.0)
 
         for _ in range(_MAX_LOOT_ROUNDS):
+            self._pause_gate()
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
             result = self.matchmaking()
@@ -1187,12 +1221,15 @@ def run(
     cycles: int,
     deps: Deps | None = None,
     should_stop: Callable[[], bool] | None = None,
+    is_paused: Callable[[], bool] | None = None,
 ) -> RunSummary:
     """Run `cycles` full bot cycles. Step-level failures come back as a RunSummary."""
     if deps is None:
         deps = _default_deps(config)
     if should_stop is not None:
         deps.should_stop = should_stop
+    if is_paused is not None:
+        deps.is_paused = is_paused
     session = _Session(config, mode, deps)
 
     result = session.connect()

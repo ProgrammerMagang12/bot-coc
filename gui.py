@@ -50,6 +50,7 @@ BLUE_DARK = "#2d78b5"
 
 STATUS_COLORS = {
     "running": GREEN,
+    "paused": BLUE,
     "ok": "#5ef2c0",
     "stopped": AMBER,
     "failed": RED,
@@ -107,6 +108,7 @@ class _Instance:
     def __init__(self) -> None:
         self.thread: threading.Thread | None = None
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event()
 
     @property
     def running(self) -> bool:
@@ -117,6 +119,8 @@ def _status_kind(text: str) -> str:
     low = (text or "").lower()
     if low.startswith("jalan"):
         return "running"
+    if low.startswith("paused"):
+        return "paused"
     if low.startswith("ok"):
         return "ok"
     if low.startswith("dihentikan") or low.startswith("berhenti"):
@@ -361,6 +365,11 @@ class App:
             ctrl, "■  STOP", RED, RED_DARK, self._stop,
             font=("Segoe UI", 10, "bold"), width=8, pady=5,
         ).pack(side="left")
+        self.pause_btn = self._flat_button(
+            ctrl, "⏸  PAUSE", BLUE, BLUE_DARK, self._toggle_pause,
+            font=("Segoe UI", 10, "bold"), width=10, pady=5,
+        )
+        self.pause_btn.pack(side="left", padx=6)
         self.status_label = tk.Label(
             ctrl, text="—", bg=PANEL, fg=FG_DIM, font=("Segoe UI", 9, "bold"), padx=10, pady=3
         )
@@ -446,11 +455,18 @@ class App:
             self._account_card(name)
         if self.selected:
             self._on_select()
+        self._sync_pause_button()
 
     def _account_card(self, name: str) -> None:
         selected = name == self.selected
-        running = name in self.instances and self.instances[name].running
-        kind = "running" if running else _status_kind(self.status.get(name, ""))
+        inst = self.instances.get(name)
+        running = inst is not None and inst.running
+        if running and inst.pause_event.is_set():
+            kind = "paused"
+        elif running:
+            kind = "running"
+        else:
+            kind = _status_kind(self.status.get(name, ""))
         dot = STATUS_COLORS.get(kind, FG_FAINT)
         card_bg = CARD if selected else SIDEBAR
         card = tk.Frame(
@@ -642,6 +658,7 @@ class App:
             self._info("Sudah jalan", f"Instance '{name}' sedang berjalan.")
             return
         inst.stop_event.clear()
+        inst.pause_event.clear()
         try:
             cfg = load_config(profiles.profile_path(name))  # validasi awal
         except Exception as exc:  # noqa: BLE001
@@ -709,7 +726,11 @@ class App:
                 log_queue.put((name, "<<< FAILED: emulator tidak siap"))
                 self.status[name] = "emulator tidak siap"
                 return
-            summary = run(cfg, "live", RUN_UNTIL, should_stop=inst.stop_event.is_set)
+            summary = run(
+                cfg, "live", RUN_UNTIL,
+                should_stop=inst.stop_event.is_set,
+                is_paused=inst.pause_event.is_set,
+            )
             if summary.ok:
                 extra = f" ({summary.reason})" if summary.reason else ""
                 line = f"<<< OK: {summary.cycles_done} cycle selesai{extra}"
@@ -738,6 +759,33 @@ class App:
             inst.stop_event.set()
             self.status[name] = "berhenti diminta…"
             self._set_status_label(name)
+
+    def _toggle_pause(self) -> None:
+        name = self.selected
+        if not name:
+            return
+        inst = self.instances.get(name)
+        if not (inst and inst.running):
+            self._info("Belum jalan", f"Instance '{name}' belum berjalan.")
+            return
+        if inst.pause_event.is_set():
+            inst.pause_event.clear()
+            log_queue.put((name, ">>> RESUME — lanjut dari titik sebelumnya"))
+            self.status[name] = "jalan kembali (jeda selesai)"
+        else:
+            inst.pause_event.set()
+            log_queue.put(
+                (name, ">>> PAUSED oleh pengguna — aksi berhenti; tekan RESUME untuk lanjut")
+            )
+            self.status[name] = "PAUSED (jeda)"
+        self._sync_pause_button()
+        self._refresh_profiles(select=name)
+
+    def _sync_pause_button(self) -> None:
+        inst = self.instances.get(self.selected or "")
+        paused = bool(inst and inst.pause_event.is_set())
+        if hasattr(self, "pause_btn"):
+            self.pause_btn.config(text="▶  RESUME" if paused else "⏸  PAUSE")
 
     # -- log ------------------------------------------------------------------
     def _clear_log(self) -> None:
