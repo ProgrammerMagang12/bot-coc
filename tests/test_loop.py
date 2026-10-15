@@ -1020,6 +1020,32 @@ def test_gate_verify_exception_falls_back(monkeypatch):
     assert summary.ok and "ATTACK" in states
 
 
+def test_deck_unknown_strict_type_logs_warning(tmp_path, monkeypatch, caplog):
+    """Tipe strict tak dikenal tetap 'diabaikan' TAPI dicatat sebagai warning."""
+    import json
+    import logging
+
+    from coclab import loop as loop_mod
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deck_strict_types"] = ["dragon", "balloon", "wall_wrecker"]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    hits = {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9)}
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards", lambda img, tpl_dir, **kw: dict(hits)
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    with caplog.at_level(logging.WARNING, logger="coclab.loop"):
+        summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert any(
+        "tipe strict tak dikenal" in r.getMessage() for r in caplog.records
+    )
+    assert any("wall_wrecker" in r.getMessage() for r in caplog.records)
+
+
 def _run_with_strategy(monkeypatch, tmp_config=None, strategy=None, script=None):
     from coclab.strategy import Strategy
     st = strategy or Strategy(
@@ -1099,6 +1125,41 @@ def test_zoom_out_failure_never_breaks_loop():
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok
     assert attempts["n"] >= 2  # find_attack (home) + attack(): dua kegagalan, dua kali ditelan
+
+
+def test_zoom_out_rewrites_script_after_run_failure():
+    """Bila `sh` gagal (mis. skrip hilang pasca-reboot device), tulis ulang skrip."""
+    from coclab import pinch
+    from coclab.loop import _Session
+
+    deps, adb = make_deps(full_script(), [])
+    sh_cmd = f"sh {pinch.REMOTE_PATH}"
+    writes = {"n": 0}
+    runs = {"n": 0}
+
+    def shell_fn(cmd):
+        if cmd == sh_cmd:
+            runs["n"] += 1
+            if runs["n"] == 1:  # device reboot: skrip sudah tak ada
+                raise RuntimeError("sh: not found")
+        elif "cat >" in cmd and pinch.REMOTE_PATH in cmd:
+            writes["n"] += 1
+        return "com.supercell.clashofclans" if "ps" in cmd else ""
+
+    adb.shell_fn = shell_fn
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(
+        deps.adb, session.device, "observe", (1600, 900)
+    )
+
+    session._zoom_out()
+    assert writes["n"] == 1
+    assert session._pinch_ready is False  # kegagalan mereset cache
+
+    session._zoom_out()
+    assert writes["n"] == 2  # skrip ditulis ulang, bukan no-op selamanya
+    assert session._pinch_ready is True
 
 
 def test_mirror_picks_mirrored_scenario(monkeypatch):

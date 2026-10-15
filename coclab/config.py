@@ -349,7 +349,7 @@ def load_config(path: str | Path) -> Config:
         isinstance(v, str) and v.strip() for v in strict_raw
     ):
         raise ConfigError("deck_strict_types: expected a list of strings")
-    deck_strict_types = [str(v).strip() for v in strict_raw]
+    deck_strict_types = [str(v).strip().lower() for v in strict_raw]
     deploy_jitter_px = _nonneg_int(data.get("deploy_jitter_px", 38), "deploy_jitter_px")
     mirror_strategies = _bool(data.get("mirror_strategies", True), "mirror_strategies")
     pct_raw = data.get("tap_delay_jitter_pct", 30)

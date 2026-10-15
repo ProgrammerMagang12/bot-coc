@@ -338,6 +338,11 @@ class _Session:
                         "Deck check: soft (tak tersedia/tak diwajibkan): %s",
                         check.soft_missing,
                     )
+                if check.notes.get("ignored"):
+                    logger.warning(
+                        "Deck check: tipe strict tak dikenal diabaikan: %s",
+                        check.notes["ignored"],
+                    )
                 if not check.ok:
                     logger.warning(
                         "Deck TIDAK sesuai (tipe hilang: %s; terdeteksi: %s)",
@@ -752,6 +757,7 @@ class _Session:
                 self.cfg.zoom_out_settle_s,
             )
         except Exception as exc:  # noqa: BLE001 - zoom opsional, loop wajib lanjut
+            self._pinch_ready = False  # device bisa reboot: paksa tulis ulang skrip
             logger.warning("Zoom-out gagal (lanjut): %s", exc)
 
     _DETECT_KEYS: dict[str, str] = {

@@ -112,6 +112,17 @@ def test_jitter_point_clamped_at_edges():
         assert 0.02 <= x <= 0.98 and 0.03 <= y <= 0.80
 
 
+def test_jitter_point_clamped_at_upper_edges():
+    """Titik di dekat tepi atas tetap dijepit ke batas 0.98/0.80."""
+    rng = random.Random(2)
+    for _ in range(200):
+        x, y = jitter_point(0.979, 0.799, 0.03, 0.03, rng=rng)
+        assert 0.02 <= x <= 0.98 and 0.03 <= y <= 0.80
+    # nilai awal di atas batas → clamp atas harus berlaku (xp>0.5 → delta negatif)
+    x, y = jitter_point(0.99, 0.81, 0.1, 0.1, rng=random.Random(3))
+    assert x <= 0.98 and y <= 0.80
+
+
 def test_mirror_strategy_flips_all_points():
     s = Strategy(
         name="a", dragon_drops=[[0.1, 0.4]], balloon_drops=[[0.2, 0.3]],

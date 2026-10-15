@@ -226,6 +226,16 @@ def test_example_config_reliability_fields():
     assert cfg.connection_lost_point is None
 
 
+def test_deck_strict_types_normalized_lowercase(tmp_path):
+    """Entri uppercase/spasi dinormalkan agar 'Dragon' tak jadi tipe tak dikenal."""
+    data = json.loads(EXAMPLE.read_text())
+    data["deck_strict_types"] = ["Dragon", " balloon "]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    cfg = load_config(p)
+    assert cfg.deck_strict_types == ["dragon", "balloon"]
+
+
 def test_defaults_when_absent(tmp_path):
     import json
     data = json.loads(EXAMPLE.read_text())
