@@ -425,19 +425,25 @@ def _run_with_strategy(monkeypatch, tmp_config=None, strategy=None, script=None)
     return summary, adb, states
 
 
-def test_jitter_applied_to_map_drops(monkeypatch):
-    summary, adb, _ = _run_with_strategy(monkeypatch)
+def test_jitter_applied_to_map_drops(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["mirror_strategies"] = False  # fokus jitter; cermin diuji terpisah
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    summary, adb, _ = _run_with_strategy(None, tmp_config=p)
     assert summary.ok
-    # dragon drop 0.5,0.5 → tx ∈ [800, 840] (arah +), ty ∈ [423, 450] (ke atas)
+    # dragon [0.5,0.5] → arah + : tx ∈ [800, 839], ty ∈ [423, 450]
     assert any(800 <= tx <= 840 and 421 <= ty <= 450 for tx, ty in adb.taps)
-    # balloon drop 0.55,0.5 → tx ∈ [880, 880+38]
-    assert any(880 <= tx <= 918 and 421 <= ty <= 450 for tx, ty in adb.taps)
+    # balloon [0.55,0.5] → arah − (ke tengah): tx ∈ [842, 880], ty ∈ [423, 450]
+    assert any(842 <= tx <= 880 and 421 <= ty <= 450 for tx, ty in adb.taps)
 
 
 def test_jitter_zero_taps_exact(tmp_path):
     import json
     data = json.loads(EXAMPLE.read_text())
     data["deploy_jitter_px"] = 0
+    data["mirror_strategies"] = False
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     summary, adb, _ = _run_with_strategy(None, tmp_config=p)
@@ -461,6 +467,8 @@ def test_mirror_picks_mirrored_scenario(monkeypatch):
 ```
 
 - [ ] **Step 2: Run to verify fail** — FAIL (tap masih persis).
+
+- [ ] **Step 2b: Perbarui tes lama `test_attack_uses_detected_card_positions`** — setelah jitter aktif, tes ini pecah (assert presisi `(800, 450)`). Ubah agar memakai config tmp (json dari EXAMPLE → tmp_path) dengan `"deploy_jitter_px": 0` dan `"mirror_strategies": false`; assert lain (posisi kartu deteksi ±2px) tetap apa adanya.
 
 - [ ] **Step 3: Implement di `coclab/loop.py`**
 
@@ -658,7 +666,8 @@ def test_connection_lost_taps_reconnect_point(tmp_path):
             return False
 ```
 
-- Ganti semua pemanggilan `self._handle_disconnected(shot)` → `self._handle_popups(shot)`; audit call sites: `find_attack`, `matchmaking`, loop tunggu battle di `attack()`, dan `return_home()` (tambahkan bila belum ada — setelah capture, sebelum cek returnhome).
+- Ganti semua pemanggilan `self._handle_disconnected(shot)` → `self._handle_popups(shot)`; semua 4 call-site sudah ada: `find_attack` (~baris 524), `matchmaking` (~559), loop tunggu battle di `attack()` (~851), dan `return_home` (~937) — tidak ada yang perlu ditambah.
+- **Perbarui 2 unit test lama** di `tests/test_loop.py` (~baris 330 & 342) yang memanggil `session._handle_disconnected(None)` → `session._handle_popups(None)`; semantik tes tidak berubah (RELOAD ditemukan → True; tidak ada apa-apa → False).
 - Catatan urutan: Another_device dicek SEBELUM Client_error/Connection_lost.
 
 - [ ] **Step 5: Run tests** → hijau penuh.
