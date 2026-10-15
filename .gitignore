@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+work/
+logs/
+config.json
+assets/*.png
+!assets/.gitkeep

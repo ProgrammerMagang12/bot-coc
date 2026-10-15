@@ -1,0 +1,17 @@
+{
+  "adb_path": "D:\\HH\\coc bot\\CROWZ LAB\\CROWZBOT 1.7.1\\adb.exe",
+  "device_address": "127.0.0.1:5555",
+  "threshold": 0.69,
+  "min_resource": 300000,
+  "loot_roi": [0.02, 0.05, 0.35, 0.12],
+  "on_ocr_fail": "stop",
+  "drop_points": [[0.35, 0.72]],
+  "tap_delay_ms": 150,
+  "end_delay_s": 20,
+  "end_battle_point": [0.065, 0.75],
+  "confirm_point": [0.614, 0.648],
+  "return_home_point": [0.497, 0.849],
+  "next_max_tries": 5,
+  "search_timeout_s": 60,
+  "workdir": "work"
+}
