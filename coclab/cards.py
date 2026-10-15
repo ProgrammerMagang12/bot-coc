@@ -13,6 +13,7 @@ Modul ini murni fungsi gambar (tanpa ADB): input citra BGR/gray, output
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -50,6 +51,13 @@ HERO_KEYS: tuple[str, ...] = (
 )
 
 SIEGE_KEYS: tuple[str, ...] = ("siege_blimp", "siege_empty", "siege_loaded")
+
+# tipe strict yang dikenali gate deck; di luar ini dicatat sebagai "ignored"
+STRICT_KNOWN: set[str] = {"dragon", "balloon", "extra", "rage", "freeze"}
+
+# tipe strict -> kunci pasukan yang menentukan apakah spell dikomposisikan
+_ZERO_SKIP_SPELLS: dict[str, str] = {"rage": "rage_spell", "freeze": "freeze_spell"}
+
 
 _tpl_cache: dict[str, np.ndarray | None] = {}
 
@@ -124,3 +132,74 @@ def detect_cards(
             cy = max_loc[1] + tpl.shape[0] // 2 + offset_y
             results[name] = (int(cx), int(cy), score)
     return results
+
+
+def available_keys(templates_dir: str | Path) -> set[str]:
+    """Kunci kartu yang file templatenya benar-benar ada di folder."""
+    directory = Path(templates_dir)
+    return {name for name, filename in CARD_FILES.items() if (directory / filename).is_file()}
+
+
+def count_roi(cx: int, cy: int) -> tuple[int, int, int, int]:
+    """Kotak badge jumlah di sekitar pusat kartu: (x1, y1, x2, y2)."""
+    return (cx - 42, cy - 74, cx + 42, cy - 44)
+
+
+@dataclass
+class DeckCheck:
+    """Hasil verifikasi deck: apakah gate boleh lanjut, dan alasannya."""
+
+    ok: bool
+    problems: list[str]
+    soft_missing: list[str]
+    notes: dict
+
+
+def verify_deck(
+    detected: dict[str, tuple[int, int, float]],
+    army: dict[str, int],
+    strict_types: list[str],
+    extra_template: str | None = None,
+    available: set[str] | None = None,
+) -> DeckCheck:
+    """Periksa tipe strict terdeteksi pada ``detected``.
+
+    Urutan ``strict_types`` dipertahankan, duplikat di-skip. Tipe tak dikenal
+    masuk ``notes["ignored"]``. ``extra`` tanpa ``extra_template`` dan spell
+    rage/freeze dengan komposisi 0 bersifat opsional. Bila ``available``
+    diberikan, tipe tanpa template dianggap soft-missing. Tipe wajib yang
+    hilang masuk ``problems``; ``ok`` benar bila tidak ada masalah.
+    """
+    problems: list[str] = []
+    soft_missing: list[str] = []
+    notes: dict = {"ignored": [], "ok": []}
+    seen: set[str] = set()
+    for tipe in strict_types:
+        if tipe in seen:
+            continue
+        seen.add(tipe)
+        if tipe not in STRICT_KNOWN:
+            notes["ignored"] += [tipe]
+            continue
+        if tipe == "extra":
+            if extra_template is None:
+                soft_missing += ["extra"]
+                continue
+            kunci = extra_template
+        elif tipe in _ZERO_SKIP_SPELLS and army.get(_ZERO_SKIP_SPELLS[tipe], 0) == 0:
+            continue
+        else:
+            kunci = tipe
+        if available is not None and kunci not in available:
+            soft_missing += [tipe]
+            continue
+        if kunci in detected:
+            notes["ok"] += [tipe]
+        else:
+            problems += [tipe]
+    return DeckCheck(
+        ok=not problems,
+        problems=problems,
+        soft_missing=soft_missing,
+        notes=notes,
+    )
