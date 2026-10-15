@@ -154,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         data: dict = {}
         if config_path.is_file():
             data = json.loads(config_path.read_text(encoding="utf-8"))
+        existing = data.get("train_ui") or {}
         ui: dict = {}
         grid: dict = {}
         for key, point in result.items():
@@ -162,10 +163,10 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 ui[key] = point
         if grid:
-            ui["grid"] = grid
-        data["train_ui"] = ui
+            ui["grid"] = {**(existing.get("grid") or {}), **grid}
+        data["train_ui"] = {**existing, **ui}
         config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        print(f"tersimpan {len(result)} titik ke train_ui di {config_path}")
+        print(f"tersimpan {len(result)} titik (merge) ke train_ui di {config_path}")
         for key in sorted(result):
             print("  -", key)
         root.destroy()
