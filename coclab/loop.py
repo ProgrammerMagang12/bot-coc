@@ -243,15 +243,31 @@ class _Session:
         return False
 
     def _army_ready(self) -> bool:
-        """Bandingkan jumlah dragon di deck dengan simpanan bot (army.dragon_drops)."""
+        """Validasi deck: kartu dragon & balloon wajib ada (tipe) + jumlah dragon (badge)."""
         shot = self._capture("army_check.png")
         if shot is None:
             return True
-        crop = self.deps.crop_percent(self._img(shot), *self.cfg.army_badge_roi)
+        img = self._img(shot)
+        for template in ("dragon_card.png", "balloon_card.png"):
+            path = self.assets / template
+            if not path.is_file():
+                continue
+            try:
+                match = self.deps.find_template(img, path, 0.85)
+            except ValueError:
+                continue
+            if not match.found:
+                logger.warning(
+                    "Deck tidak sesuai simpanan bot (kartu %s tak ketemu, skor %.2f)",
+                    template.replace("_card.png", ""),
+                    match.score,
+                )
+                return False
+        crop = self.deps.crop_percent(img, *self.cfg.army_badge_roi)
         value = self.deps.read_badge(crop)
         expected = int(self.cfg.army.get("dragon_drops", 0))
         if value is None:
-            logger.info("Badge pasukan tak terbaca; anggap siap")
+            logger.info("Jumlah tak terbaca, tapi kartu sudah sesuai - lanjut")
             return True
         logger.info("Cek pasukan: dragon x%d (harap x%d)", value, expected)
         if expected > 0:

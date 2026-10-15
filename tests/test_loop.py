@@ -427,6 +427,17 @@ def test_army_mismatch_stops_when_no_train_points():
     assert end_battle in adb.taps  # langsung end battle, tidak deploy
 
 
+def test_army_type_mismatch_detected():
+    states = []
+    script = full_script()
+    script["dragon_card.png"] = Match(False, 0, 0, 0.4)  # kompi manual tanpa dragon
+    deps, adb = make_deps(script, states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "pasukan" in summary.reason
+    end_battle = (int(0.065 * 1600), int(0.75 * 900))
+    assert end_battle in adb.taps  # end battle, tidak deploy
+
+
 def test_army_mismatch_trains_then_retries(tmp_path):
     import json
 

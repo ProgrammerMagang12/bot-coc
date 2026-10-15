@@ -87,6 +87,8 @@ def full_script(**overrides):
         "attack2.png": Match(True, 600, 700, 0.95),
         "next.png": Match(True, 1400, 640, 0.95),
         "returnhome.png": Match(True, 1, 1, 0.95),
+        "dragon_card.png": Match(True, 1, 1, 0.95),
+        "balloon_card.png": Match(True, 1, 1, 0.95),
     }
     base.update(overrides)
     return base
