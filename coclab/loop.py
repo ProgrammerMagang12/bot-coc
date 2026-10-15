@@ -15,7 +15,11 @@ from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
 from coclab.config import Config
 from coclab.state import BotState, StepResult
-from coclab.strategy import load_strategies as load_strategies_default
+from coclab.strategy import (
+    jitter_point,
+    load_strategies as load_strategies_default,
+    mirror_strategy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -745,6 +749,21 @@ class _Session:
                 best_score = hit[2]
         return self._detected_point(best_key)
 
+    def _jittered(self, xp, yp):
+        width, height = self._size
+        if self.cfg.deploy_jitter_px <= 0 or width <= 0 or height <= 0:
+            return [xp, yp]
+        jx = self.cfg.deploy_jitter_px / width
+        jy = self.cfg.deploy_jitter_px * 0.7 / height
+        return jitter_point(xp, yp, jx, jy)
+
+    def _deploy_delay(self):
+        delay = self.cfg.tap_delay_ms / 1000
+        pct = self.cfg.tap_delay_jitter_pct / 100
+        if pct > 0:
+            delay *= random.uniform(1 - pct, 1 + pct)
+        return delay
+
     def _drop_group(
         self,
         card_key: str,
@@ -777,8 +796,8 @@ class _Session:
         taps = len(points) if count is None else max(count, 0)
         for i in range(taps):
             xp, yp = points[i % len(points)]
-            self.actions.tap_percent(xp, yp)
-            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+            self.actions.tap_percent(*self._jittered(xp, yp))
+            self.deps.sleep(self._deploy_delay())
 
     def _drop_heroes(self, chosen) -> None:
         if not chosen.hero_positions:
@@ -797,8 +816,8 @@ class _Session:
             self.actions.tap_percent(*card)
             logger.info("Deploy hero %d", i + 1)
             self.deps.sleep(0.4)
-            self.actions.tap_percent(xp, yp)
-            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+            self.actions.tap_percent(*self._jittered(xp, yp))
+            self.deps.sleep(self._deploy_delay())
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
@@ -810,6 +829,8 @@ class _Session:
             logger.warning("Strategy load failed (%s); using legacy single drop", exc)
 
         if strategies:
+            if self.cfg.mirror_strategies:
+                strategies = strategies + [mirror_strategy(s) for s in strategies]
             chosen = random.choice(strategies)
             logger.info("Executing Scenario: %s", chosen.name)
             army = self.cfg.army

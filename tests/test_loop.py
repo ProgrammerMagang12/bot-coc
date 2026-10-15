@@ -210,9 +210,17 @@ def test_live_attack_taps_card_first_legacy():
     assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
 
 
-def test_multi_drop_attack_taps_cards_then_points():
+def test_multi_drop_attack_taps_cards_then_points(tmp_path):
+    import json
+
     from coclab.actions import Actions
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # urutan/titik persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -225,7 +233,7 @@ def test_multi_drop_attack_taps_cards_then_points():
             wall_wrecker_drop=[0.36, 0.66],
         )
     ]
-    cfg = load_config(EXAMPLE)
+    cfg = load_config(p)
     summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
     assert adb.swipes == []
@@ -626,6 +634,8 @@ def test_army_counts_cycle_strategy_points(tmp_path):
 
     data = json.loads(EXAMPLE.read_text())
     data["army"] = {"dragon_drops": 5, "balloon_drops": 1, "wall_wrecker_drop": 1}
+    data["deploy_jitter_px"] = 0  # siklus titik persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     states = []
@@ -650,8 +660,16 @@ def test_army_counts_cycle_strategy_points(tmp_path):
     ]
 
 
-def test_heroes_deployed_at_scenario_positions():
+def test_heroes_deployed_at_scenario_positions(tmp_path):
+    import json
+
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # posisi hero persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -664,7 +682,7 @@ def test_heroes_deployed_at_scenario_positions():
             hero_positions=[[0.30, 0.40], [0.70, 0.60]],
         )
     ]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     hero1_card = (int(0.424 * 1600), int(0.91 * 900))
     hero2_card = (int(0.502 * 1600), int(0.91 * 900))
@@ -675,8 +693,16 @@ def test_heroes_deployed_at_scenario_positions():
     assert adb.taps.index(hero2_card) < adb.taps.index(pos2)
 
 
-def test_spells_cast_at_scenario_positions():
+def test_spells_cast_at_scenario_positions(tmp_path):
+    import json
+
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # posisi spell persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -690,7 +716,7 @@ def test_spells_cast_at_scenario_positions():
             freeze_spell_positions=[[0.60, 0.60]],
         )
     ]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     rage_card = (int(0.58 * 1600), int(0.933 * 900))
     freeze_card = (int(0.658 * 1600), int(0.933 * 900))
@@ -801,10 +827,18 @@ def test_wall_upgrade_not_called_when_disabled(monkeypatch):
     assert summary.ok and calls["n"] == 0
 
 
-def test_attack_uses_detected_card_positions(monkeypatch):
+def test_attack_uses_detected_card_positions(monkeypatch, tmp_path):
     """Kartu hasil deteksi template dipakai untuk deploy (bukan koordinat lama)."""
+    import json
+
     from coclab import loop as loop_mod
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # fokus presisi titik; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     detected = {
         "dragon": (170, 815, 0.90),
@@ -831,7 +865,7 @@ def test_attack_uses_detected_card_positions(monkeypatch):
     )
     deps, adb = make_deps(full_script(), [])
     deps.load_strategies = lambda path: [strategy]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
 
     def hit(x, y):
@@ -891,3 +925,58 @@ def test_gate_verify_exception_falls_back(monkeypatch):
     deps, adb = make_deps(full_script(), states)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and "ATTACK" in states
+
+
+def _run_with_strategy(monkeypatch, tmp_config=None, strategy=None, script=None):
+    from coclab.strategy import Strategy
+    st = strategy or Strategy(
+        name="t", dragon_drops=[[0.5, 0.5]], balloon_drops=[[0.55, 0.5]],
+        wall_wrecker_drop=[0.3, 0.55], hero_positions=[[0.6, 0.5]],
+        rage_spell_positions=[[0.7, 0.5]], freeze_spell_positions=[[0.8, 0.5]])
+    states = []
+    deps, adb = make_deps(script or full_script(), states)
+    deps.load_strategies = lambda path: [st]
+    cfg = load_config(tmp_config or EXAMPLE)
+    summary = run(cfg, "observe", 1, deps=deps)
+    return summary, adb, states
+
+
+def test_jitter_applied_to_map_drops(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["mirror_strategies"] = False  # fokus jitter; cermin diuji terpisah
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    summary, adb, _ = _run_with_strategy(None, tmp_config=p)
+    assert summary.ok
+    # dragon [0.5,0.5] → arah + : tx ∈ [800, 839], ty ∈ [423, 450]
+    assert any(800 <= tx <= 840 and 421 <= ty <= 450 for tx, ty in adb.taps)
+    # balloon [0.55,0.5] → arah − (ke tengah): tx ∈ [842, 880], ty ∈ [423, 450]
+    assert any(842 <= tx <= 880 and 421 <= ty <= 450 for tx, ty in adb.taps)
+
+
+def test_jitter_zero_taps_exact(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    summary, adb, _ = _run_with_strategy(None, tmp_config=p)
+    assert summary.ok
+    assert (800, 450) in adb.taps      # dragon [0.5, 0.5] persis
+    assert (880, 450) in adb.taps      # balloon [0.55, 0.5] persis
+
+
+def test_mirror_picks_mirrored_scenario(monkeypatch):
+    from coclab import loop as loop_mod
+    from coclab.strategy import Strategy
+    mirrored_dragon = [[0.1, 0.5]]
+    st = Strategy(name="m", dragon_drops=mirrored_dragon, balloon_drops=[],
+                  wall_wrecker_drop=None, hero_positions=[], rage_spell_positions=[],
+                  freeze_spell_positions=[])
+    monkeypatch.setattr(loop_mod.random, "choice", lambda seq: seq[-1])  # cermin di akhir
+    summary, adb, _ = _run_with_strategy(None, strategy=st)
+    assert summary.ok
+    # asli [0.1] → cermin [0.9]: tx ∈ [1440−38, 1440]
+    assert any(1402 <= tx <= 1441 and 421 <= ty <= 450 for tx, ty in adb.taps)
