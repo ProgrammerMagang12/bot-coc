@@ -36,6 +36,15 @@ class FakeActions:
     def tap_px(self, x, y):
         self.adb.tap(self.device, x, y)
 
+    def swipe_percent(self, x1p, y1p, x2p, y2p):
+        self.adb.swipe(
+            self.device,
+            int(x1p * 1600),
+            int(y1p * 900),
+            int(x2p * 1600),
+            int(y2p * 900),
+        )
+
 
 def make_deps(script, states):
     """script: {nama_template: Match}. fake find_template membaca Path(tpl).name."""
