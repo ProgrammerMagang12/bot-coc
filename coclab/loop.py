@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from coclab import vision, wallupgrade
+from coclab import digits, vision, wallupgrade
 from coclab.actions import Actions
 from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
@@ -38,6 +38,7 @@ class Deps:
     find_template: Callable[..., vision.Match]
     crop_percent: Callable[..., object]
     ocr_digits: Callable[..., int | None]
+    read_loot: Callable[..., int | None]
     actions_factory: Callable[..., object]
     load_strategies: Callable[[str], list]
     sleep: Callable[[float], None]
@@ -56,6 +57,7 @@ def _default_deps(config: Config) -> Deps:
         find_template=find_template,
         crop_percent=vision.crop_percent,
         ocr_digits=vision.ocr_digits,
+        read_loot=digits.read_loot_number,
         actions_factory=Actions,
         load_strategies=load_strategies_default,
         sleep=time.sleep,
@@ -172,28 +174,25 @@ class _Session:
             logger.info("Searching opponent...")
             self.deps.sleep(2)
 
-    _LOOT_VARIANTS = (4, 6)
-
-    def _read_variant(self, img, roi: list[float], upscale: int) -> int | None:
-        crop = self.deps.crop_percent(img, *roi)
-        return self.deps.ocr_digits(vision.enhance_numeric_crop(crop, upscale=upscale))
+    def _read_once(self, roi: list[float]) -> int | None:
+        shot = self._capture("loot.png")
+        if shot is None:
+            return None
+        crop = self.deps.crop_percent(self._img(shot), *roi)
+        return self.deps.read_loot(crop)
 
     def _read_verified(self, roi: list[float]) -> int | None:
-        """Two captures x two enhancement variants; accept only on agreement."""
-        for attempt in range(2):
-            shot = self._capture("loot.png")
-            if shot is None:
-                return None
-            img = self._img(shot)
-            values = [
-                self._read_variant(img, roi, upscale) for upscale in self._LOOT_VARIANTS
-            ]
-            parsed = [v for v in values if v is not None]
-            if len(parsed) == 2 and parsed[0] == parsed[1]:
-                return parsed[0]
-            if attempt == 0:
-                logger.info("Loot read unconfirmed (%s); re-capturing", values)
+        """Two reads must agree (template digit reader); retry once on failure."""
+        for _ in range(2):
+            value = self._read_once(roi)
+            if value is None:
                 self.deps.sleep(1.0)
+                continue
+            confirm = self._read_once(roi)
+            if confirm == value:
+                return value
+            logger.info("Loot read mismatch (%s vs %s); retrying", value, confirm)
+            self.deps.sleep(1.0)
         return None
 
     def evaluate_loot(self) -> StepResult:

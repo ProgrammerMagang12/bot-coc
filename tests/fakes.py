@@ -60,6 +60,7 @@ def make_deps(script, states):
         find_template=find_template,
         crop_percent=lambda img, *a: img,
         ocr_digits=lambda img, engine=None: 999999,
+        read_loot=lambda img: 999999,
         actions_factory=lambda a, d, m, s: FakeActions(a, d, m, s),
         load_strategies=lambda path: [],
         sleep=lambda s: None,

@@ -22,7 +22,7 @@ def test_loot_low_clicks_next_and_retries_matchmaking():
     deps, adb = make_deps(script, states)
     # per ronde: gold read1,read2 lalu elixir read1,read2
     loots = iter([100, 100, 50, 50, 999999, 999999, 999999, 999999])
-    deps.ocr_digits = lambda img, engine=None: next(loots)
+    deps.read_loot = lambda img: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2
 
@@ -33,7 +33,7 @@ def test_elixir_threshold_enforced():
     deps, adb = make_deps(script, states)
     # gold tinggi, elixir rendah → tetap loot_low
     loots = iter([999999, 999999, 10, 10, 999999, 999999, 999999, 999999])
-    deps.ocr_digits = lambda img, engine=None: next(loots)
+    deps.read_loot = lambda img: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2
 
@@ -43,7 +43,7 @@ def test_loot_retry_after_bad_read():
     deps, adb = make_deps(full_script(), states)
     # gold: mismatch (100 vs 200 → None) lalu retry 999999,999999; elixir 999999,999999
     loots = iter([100, 200, 999999, 999999, 999999, 999999])
-    deps.ocr_digits = lambda img, engine=None: next(loots)
+    deps.read_loot = lambda img: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok
 
@@ -61,9 +61,9 @@ def test_ocr_fail_policy_next_skips_base(tmp_path):
     states = []
     script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
     deps, adb = make_deps(script, states)
-    # dua capture utk gold semuanya None → skip base; ronde 2 normal → attack
-    loots = iter([None, None, None, None, 999999, 999999, 999999, 999999])
-    deps.ocr_digits = lambda img, engine=None: next(loots)
+    # dua read utk gold semuanya None → skip base; ronde 2 normal → attack
+    loots = iter([None, None, 999999, 999999, 999999, 999999])
+    deps.read_loot = lambda img: next(loots)
     summary = run(lc(p), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2
 
@@ -73,7 +73,7 @@ def test_loot_recovers_on_second_capture():
     deps, adb = make_deps(full_script(), states)
     # capture pertama tak terbaca (dua varian None), capture kedua bersih
     loots = iter([None, None, 999999, 999999, 999999, 999999])
-    deps.ocr_digits = lambda img, engine=None: next(loots)
+    deps.read_loot = lambda img: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok
 
@@ -89,7 +89,7 @@ def test_loot_double_read_mismatch_is_fail_safe(tmp_path):
     p.write_text(json.dumps(data))
     deps, _ = make_deps(full_script(), [])
     seq = iter([100, 200, 100, 200])  # dua percobaan pun mismatch
-    deps.ocr_digits = lambda img, engine=None: next(seq)
+    deps.read_loot = lambda img: next(seq)
     summary = run(lc(p), "observe", 1, deps=deps)
     assert not summary.ok and "OCR" in summary.reason.upper()
 
@@ -104,7 +104,7 @@ def test_ocr_none_with_policy_stop_fails(tmp_path):
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     deps, _ = make_deps(full_script(), [])
-    deps.ocr_digits = lambda img, engine=None: None
+    deps.read_loot = lambda img: None
     summary = run(lc(p), "observe", 1, deps=deps)
     assert not summary.ok and "OCR" in summary.reason.upper()  # policy stop
 
@@ -119,7 +119,7 @@ def test_ocr_none_with_policy_attack_continues(tmp_path):
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     deps, _ = make_deps(full_script(), [])
-    deps.ocr_digits = lambda img, engine=None: None
+    deps.read_loot = lambda img: None
     summary = run(lc(p), "observe", 1, deps=deps)
     assert summary.ok
 
