@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -111,11 +112,11 @@ _GROUP_TRIM = ".,:;'\"|()[]{}"
 
 
 def _digit_groups(tokens: list[str]) -> list[str] | None:
-    """Digit groups after trimming harmless punctuation; None when a token is not numeric."""
+    """Digit groups after trimming any non-digit edge noise; None when a token has no digit core."""
     groups: list[str] = []
     for token in tokens:
-        core = token.strip(_GROUP_TRIM)
-        if not core.isdigit():
+        core = re.sub(r"^\D+|\D+$", "", token)
+        if not core or not core.isdigit():
             return None
         groups.append(core)
     return groups
