@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from coclab import digits, vision, wallupgrade
+from coclab import cards, digits, vision, wallupgrade
 from coclab.actions import Actions
 from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
@@ -91,6 +91,8 @@ class _Session:
         self.device: str = ""
         self.actions = None
         self.workdir: Path = Path(config.workdir)
+        self._deck_cards: dict[str, tuple[int, int, float]] = {}
+        self._size: tuple[int, int] = (0, 0)
 
     # -- helpers ---------------------------------------------------------
 
@@ -251,26 +253,59 @@ class _Session:
         return False
 
     def _army_ready(self) -> bool:
-        """Validasi deck: kartu dragon & balloon wajib ada (tipe) + jumlah dragon (badge)."""
+        """Validasi deck: kartu dragon & balloon wajib ada + jumlah dragon (badge).
+
+        Prioritas: deteksi template kartu (akurat lintas akun, tahan perbedaan
+        urutan/jumlah hero). Bila deteksi tidak konklusif, jatuh ke cek template
+        lama (dragon_card.png/balloon_card.png). Badge jumlah tetap dicek.
+        """
         shot = self._capture("army_check.png")
         if shot is None:
             return True
         img = self._img(shot)
-        for template in ("dragon_card.png", "balloon_card.png"):
-            path = self.assets / template
-            if not path.is_file():
-                continue
-            try:
-                match = self.deps.find_template(img, path, 0.85)
-            except ValueError:
-                continue
-            if not match.found:
+        detected: dict = {}
+        if self.cfg.card_detection:
+            tpl_dir = self.assets / "simplicity" / "deck"
+            if tpl_dir.is_dir():
+                try:
+                    detected = cards.detect_cards(
+                        img, tpl_dir, threshold=self.cfg.card_threshold
+                    )
+                except Exception as exc:  # noqa: BLE001 - deteksi tak boleh mematikan loop
+                    logger.info("Deck scan gagal (%s); pakai cek template lama", exc)
+                    detected = {}
+        if detected:
+            has_dragon = "dragon" in detected
+            has_balloon = "balloon" in detected
+            if has_dragon and has_balloon:
+                logger.info(
+                    "Deck sesuai bot (deteksi: dragon %.2f, balloon %.2f)",
+                    detected["dragon"][2],
+                    detected["balloon"][2],
+                )
+            elif has_dragon or has_balloon:
                 logger.warning(
-                    "Deck tidak sesuai simpanan bot (kartu %s tak ketemu, skor %.2f)",
-                    template.replace("_card.png", ""),
-                    match.score,
+                    "Deck tidak sesuai simpanan bot (deteksi: %s)", sorted(detected)
                 )
                 return False
+            else:
+                detected = {}  # tidak konklusif; cek dengan template lama
+        if not detected:
+            for template in ("dragon_card.png", "balloon_card.png"):
+                path = self.assets / template
+                if not path.is_file():
+                    continue
+                try:
+                    match = self.deps.find_template(img, path, 0.85)
+                except ValueError:
+                    continue
+                if not match.found:
+                    logger.warning(
+                        "Deck tidak sesuai simpanan bot (kartu %s tak ketemu, skor %.2f)",
+                        template.replace("_card.png", ""),
+                        match.score,
+                    )
+                    return False
         crop = self.deps.crop_percent(img, *self.cfg.army_badge_roi)
         value = self.deps.read_badge(crop)
         expected = int(self.cfg.army.get("dragon_drops", 0))
@@ -472,6 +507,7 @@ class _Session:
         self.actions = self.deps.actions_factory(
             self.deps.adb, self.device, self.mode, (width, height)
         )
+        self._size = (width, height)
         self.workdir = Path(self.cfg.workdir) / _safe_dir_name(self.device)
         self.workdir.mkdir(parents=True, exist_ok=True)
         return StepResult(True)
@@ -621,6 +657,66 @@ class _Session:
             self.deps.sleep(2)
         return StepResult(False, "next button not found")
 
+    _DETECT_KEYS: dict[str, str] = {
+        "dragon": "dragon",
+        "balloon": "balloon",
+        "rage_spell": "rage",
+        "freeze_spell": "freeze",
+    }
+
+    def _scan_deck(self) -> None:
+        """Deteksi posisi kartu deck sekali di awal battle (template matching)."""
+        self._deck_cards = {}
+        if not self.cfg.card_detection:
+            return
+        tpl_dir = self.assets / "simplicity" / "deck"
+        if not tpl_dir.is_dir():
+            return
+        shot = self._capture("deck_scan.png")
+        if shot is None:
+            return
+        try:
+            self._deck_cards = cards.detect_cards(
+                self._img(shot), tpl_dir, threshold=self.cfg.card_threshold
+            )
+        except Exception as exc:  # noqa: BLE001 - deteksi tidak boleh mematikan loop
+            logger.warning("Deck scan gagal: %s", exc)
+            self._deck_cards = {}
+        if self._deck_cards:
+            logger.info(
+                "Deck terdeteksi: %s",
+                ", ".join(
+                    f"{key}@({x},{y}) {score:.2f}"
+                    for key, (x, y, score) in sorted(self._deck_cards.items())
+                ),
+            )
+        else:
+            logger.info("Deck tidak terdeteksi; pakai titik kartu dari konfigurasi")
+
+    def _detected_point(self, key: str | None) -> list[float] | None:
+        """Titik persen dari kartu yang terdeteksi (None bila tidak ada)."""
+        if not key:
+            return None
+        hit = self._deck_cards.get(key)
+        if hit is None:
+            return None
+        width, height = self._size
+        if width <= 0 or height <= 0:
+            return None
+        x, y, _score = hit
+        return [x / width, y / height]
+
+    def _detected_siege_point(self) -> list[float] | None:
+        """Kartu siege terbaik dari kandidat template (blimp/empty/loaded)."""
+        best_key: str | None = None
+        best_score = 0.0
+        for key in cards.SIEGE_KEYS:
+            hit = self._deck_cards.get(key)
+            if hit is not None and hit[2] > best_score:
+                best_key = key
+                best_score = hit[2]
+        return self._detected_point(best_key)
+
     def _drop_group(
         self,
         card_key: str,
@@ -630,7 +726,23 @@ class _Session:
     ) -> None:
         if not points:
             return
-        point = card_point if card_point is not None else self.cfg.card_points[card_key]
+        point: list[float] | None = None
+        if card_key == "wall_wrecker":
+            point = self._detected_siege_point()
+        detect_key = self._DETECT_KEYS.get(card_key)
+        if card_key == "extra_troop":
+            detect_key = self.cfg.extra_troop_template
+        if point is None:
+            point = self._detected_point(detect_key)
+        if point is None:
+            point = (
+                card_point
+                if card_point is not None
+                else self.cfg.card_points.get(card_key)
+            )
+        if point is None:
+            logger.warning("Titik kartu %s tidak dikenal; grup dilewati", card_key)
+            return
         self.actions.tap_percent(*point)
         logger.info("Select %s card", card_key)
         self.deps.sleep(0.5)
@@ -641,12 +753,18 @@ class _Session:
             self.deps.sleep(self.cfg.tap_delay_ms / 1000)
 
     def _drop_heroes(self, chosen) -> None:
-        if not self.cfg.hero_cards:
-            return
         if not chosen.hero_positions:
             logger.info("Scenario has no hero positions; heroes skipped")
             return
-        for i, card in enumerate(self.cfg.hero_cards):
+        detected = [
+            point
+            for point in (self._detected_point(key) for key in cards.HERO_KEYS)
+            if point is not None
+        ]
+        card_list: list = detected if detected else list(self.cfg.hero_cards)
+        if not card_list:
+            return
+        for i, card in enumerate(card_list):
             xp, yp = chosen.hero_positions[i % len(chosen.hero_positions)]
             self.actions.tap_percent(*card)
             logger.info("Deploy hero %d", i + 1)
@@ -656,6 +774,7 @@ class _Session:
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
+        self._scan_deck()
         strategies: list = []
         try:
             strategies = self.deps.load_strategies(self.cfg.strategy_file)

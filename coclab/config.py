@@ -78,6 +78,9 @@ class Config:
     train_mode: str
     rage_card: list[float] | None
     freeze_card: list[float] | None
+    card_detection: bool
+    card_threshold: float
+    extra_troop_template: str | None
     army: dict[str, int]
     wall_upgrade: WallUpgradeConfig
 
@@ -314,6 +317,24 @@ def load_config(path: str | Path) -> Config:
     freeze_raw = data.get("freeze_card")
     freeze_card = None if freeze_raw is None else _point(freeze_raw, "freeze_card")
 
+    card_detection = _bool(data.get("card_detection", True), "card_detection")
+    threshold_raw = data.get("card_threshold", 0.55)
+    if (
+        not isinstance(threshold_raw, (int, float))
+        or isinstance(threshold_raw, bool)
+        or not 0 < float(threshold_raw) <= 1
+    ):
+        raise ConfigError(
+            "card_threshold: expected a number greater than 0 and at most 1"
+        )
+    card_threshold = float(threshold_raw)
+    extra_tpl_raw = data.get("extra_troop_template")
+    extra_troop_template = (
+        None
+        if extra_tpl_raw is None
+        else _nonempty_str(extra_tpl_raw, "extra_troop_template")
+    )
+
     army_raw = data.get("army", {})
     if not isinstance(army_raw, dict):
         raise ConfigError("army: expected an object of troop counts")
@@ -370,6 +391,9 @@ def load_config(path: str | Path) -> Config:
         train_mode=train_mode,
         rage_card=rage_card,
         freeze_card=freeze_card,
+        card_detection=card_detection,
+        card_threshold=card_threshold,
+        extra_troop_template=extra_troop_template,
         army=army,
         wall_upgrade=wall_upgrade,
     )
