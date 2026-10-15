@@ -1,12 +1,18 @@
-"""Vision primitives: template matching and image validation."""
+"""Vision primitives: template matching, cropping and digit OCR."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+_MAX_DIGITS = 9
 
 
 @dataclass
@@ -47,3 +53,53 @@ def find_template(img: np.ndarray, tpl: np.ndarray, threshold: float) -> Match:
     cx = int(max_loc[0] + tpl.shape[1] // 2)
     cy = int(max_loc[1] + tpl.shape[0] // 2)
     return Match(score >= threshold, cx, cy, score)
+
+
+def crop_percent(
+    img: np.ndarray, x1: float, y1: float, x2: float, y2: float
+) -> np.ndarray:
+    """Crop a percent-based region, clamped to the image bounds, at least 1x1."""
+    height, width = img.shape[:2]
+    px1 = max(0, min(width - 1, int(x1 * width)))
+    py1 = max(0, min(height - 1, int(y1 * height)))
+    px2 = max(px1 + 1, min(width, int(x2 * width)))
+    py2 = max(py1 + 1, min(height, int(y2 * height)))
+    return img[py1:py2, px1:px2]
+
+
+def _load_default_engine() -> Callable[[np.ndarray], str] | None:
+    """Lazy-load rapidocr when installed; otherwise warn and disable OCR."""
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning("rapidocr-onnxruntime not installed; OCR is disabled")
+        return None
+
+    ocr = RapidOCR()
+
+    def run(image: np.ndarray) -> str:
+        result, _elapsed = ocr(image)
+        if not result:
+            return ""
+        return " ".join(str(item[1]) for item in result)
+
+    return run
+
+
+def ocr_digits(
+    img: np.ndarray | None, engine: Callable[[np.ndarray | None], str] | None = None
+) -> int | None:
+    """Return digits found by the engine as int, or None when unavailable/implausible."""
+    if engine is None:
+        engine = _load_default_engine()
+        if engine is None:
+            return None
+    try:
+        text = engine(img) or ""
+    except Exception as exc:  # noqa: BLE001 - engine failures must not crash the loop
+        logger.warning("OCR failed: %s", exc)
+        return None
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if not digits or len(digits) > _MAX_DIGITS:
+        return None
+    return int(digits)
