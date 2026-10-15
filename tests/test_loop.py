@@ -872,3 +872,22 @@ def test_gate_strict_pass_attacks(monkeypatch):
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and "ATTACK" in states
     assert (104, 675) not in adb.taps
+
+
+def test_gate_verify_exception_falls_back(monkeypatch):
+    """verify_deck melempar exception → fallback template lama, loop tetap jalan."""
+    from coclab import loop as loop_mod
+
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards",
+        lambda img, tpl_dir, **kw: {"hero_bk": (803, 815, 0.9)},
+    )
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(loop_mod.cards, "verify_deck", boom)
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states

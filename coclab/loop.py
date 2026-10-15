@@ -278,27 +278,32 @@ class _Session:
                     detected = {}
         if detected:
             tpl_dir = self.assets / "simplicity" / "deck"
-            available = cards.available_keys(tpl_dir) if tpl_dir.is_dir() else None
-            check = cards.verify_deck(
-                detected,
-                self.cfg.army,
-                list(self.cfg.deck_strict_types),
-                extra_template=self.cfg.extra_troop_template,
-                available=available,
-            )
-            if check.soft_missing:
-                logger.info(
-                    "Deck check: soft (tak tersedia/tak diwajibkan): %s",
-                    check.soft_missing,
+            try:
+                available = cards.available_keys(tpl_dir) if tpl_dir.is_dir() else None
+                check = cards.verify_deck(
+                    detected,
+                    self.cfg.army,
+                    list(self.cfg.deck_strict_types),
+                    extra_template=self.cfg.extra_troop_template,
+                    available=available,
                 )
-            if not check.ok:
-                logger.warning(
-                    "Deck TIDAK sesuai (tipe hilang: %s; terdeteksi: %s)",
-                    check.problems, sorted(detected),
-                )
-                return False
-            logger.info("Deck check LOLOS (strict: %s)", check.notes.get("ok", []))
-            self._log_card_counts(img, detected)
+            except Exception as exc:  # noqa: BLE001 - verifikasi tak boleh mematikan loop
+                logger.warning("Deck check gagal (%s); pakai cek template lama", exc)
+                detected = {}
+            else:
+                if check.soft_missing:
+                    logger.info(
+                        "Deck check: soft (tak tersedia/tak diwajibkan): %s",
+                        check.soft_missing,
+                    )
+                if not check.ok:
+                    logger.warning(
+                        "Deck TIDAK sesuai (tipe hilang: %s; terdeteksi: %s)",
+                        check.problems, sorted(detected),
+                    )
+                    return False
+                logger.info("Deck check LOLOS (strict: %s)", check.notes.get("ok", []))
+                self._log_card_counts(img, detected)
         if not detected:
             for template in ("dragon_card.png", "balloon_card.png"):
                 path = self.assets / template
