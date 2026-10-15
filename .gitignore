@@ -5,3 +5,4 @@ logs/
 config.json
 assets/*.png
 !assets/.gitkeep
+profiles/

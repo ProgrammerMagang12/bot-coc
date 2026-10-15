@@ -28,16 +28,32 @@ Prototipe otomasi **original** (kode ditulis sendiri dari nol) untuk satu siklus
 
 ## Struktur
 
-- `coclab/` — `config`, `adb`, `capture`, `vision`, `actions`, `state`, `loop`
+- `coclab/` — `config`, `adb`, `capture`, `vision`, `digits` (pembaca angka template), `actions`, `state`, `loop`
+- `gui.py` — **GUI multi-instance**: atur Min Gold/Elixir/Dark + pasukan, Start/Stop per akun (profil di `profiles/`)
 - `main.py` — CLI: `--config` (default `config.json`), `--live` (default observe), `--cycles N` (default 1), `--device`
 - `tools/make_template.py` — pemilih ROI → template PNG ke `assets/`
+- `tools/build_digit_templates.py` — bangun ulang template digit dari frame berlabel
 - `tests/` — unit test (tidak menyentuh game/adb nyata)
+
+## GUI (multi-instance)
+
+```
+py gui.py
+```
+
+- **Tambah** profil → otomatis menyalin `config.json`; satu profil = satu akun/emulator (ubah `Device (adb)`, mis. `127.0.0.1:5557` untuk emulator kedua)
+- Ubah **Min Gold / Min Elixir / Min Dark** (0 = abaikan dark), jumlah pasukan, speed-up, cycles → **Simpan**
+- **▶ Start** menjalankan bot live per profil secara paralel (multi-instance); **■ Stop** berhenti dengan rapi
+- Log tiap instance tampil di panel bawah; status OK/FAILED terlihat di kanan
 
 ## Catatan penting
 
 - **Observe default**; `--live` wajib eksplisit. Ctrl+C = stop bersih (exit code 130).
 - OCR loot memakai `rapidocr-onnxruntime` bila terpasang; jika tidak ada → kebijakan `on_ocr_fail`
-  (default `stop` = berhenti, aman).
+  (default `next` = base dilewati, aman). Angka loot sendiri dibaca oleh **pembaca template digit sendiri**
+  (`coclab/digits.py`) — OCR hanya untuk fallback teks lain.
+- Speed-up battle: `speed_up_taps` ketukan pada `speed_up_point` setelah deploy penuh (2 ketuk = x4);
+  battle berakhir lebih awal terdeteksi → tidak menunggu `end_delay_s` penuh.
 - Deploy = **tap kartu** (bar kiri-bawah) → **tap titik di rumPUT**, per pasukan. Tap di atas bangunan = tooltip info (bukan deploy)!
   `tap_delay_ms` mengatur jeda antar-titik; pilihan pasukan TIDAK bertahan setelah battle (tap ulang tiap grup).
 - v2: serangan **multi-drop** dari `AttackStrategies.json` (buat dengan `py tools/make_strategy.py --image <scout.png> --name <nama>`); **wall upgrade** opsional via `wall_upgrade.enabled`
