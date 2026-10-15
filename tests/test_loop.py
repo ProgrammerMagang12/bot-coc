@@ -348,6 +348,7 @@ def test_find_attack_retries_until_button_appears():
     script = full_script()
     script["attack.png"] = Match(False, 0, 0, 0.1)
     deps, adb = make_deps(script, states)
+    adb.shell_fn = lambda cmd: "1234"  # CoC dianggap jalan → murni tes retry
     calls = {"n": 0}
     orig = deps.find_template
 
@@ -361,6 +362,31 @@ def test_find_attack_retries_until_button_appears():
     deps.find_template = find_template
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok  # bot waiting + retry, tidak langsung menyerah
+
+
+def test_find_attack_launches_coc_when_closed():
+    states = []
+    script = full_script()
+    script["attack.png"] = Match(False, 0, 0, 0.1)
+    deps, adb = make_deps(script, states)
+    adb.shell_fn = lambda cmd: "" if "pidof" in cmd else "ok"
+    orig = deps.find_template
+
+    def launched():
+        return any("monkey" in c for c in adb.shells)
+
+    def find_template(img, tpl, threshold):
+        name = Path(tpl).name
+        if name == "attack.png" and launched():
+            return Match(True, 700, 750, 0.95)
+        if name == "returnhome.png" and not launched():
+            return Match(False, 0, 0, 0.1)  # sebelum launch: jangan sweep dulu
+        return orig(img, tpl, threshold)
+
+    deps.find_template = find_template
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert any("monkey" in c for c in adb.shells)
 
 
 def test_de_full_stops_and_closes_coc(tmp_path):

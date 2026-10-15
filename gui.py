@@ -30,15 +30,18 @@ RUN_UNTIL = 999  # bot jalan sampai: kamu Stop / DE penuh / pasukan habis / gaga
 log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
 
 FORM_FIELDS = (
-    ("device_address", "Device (adb)"),
-    ("min_gold", "Min Gold"),
-    ("min_elixir", "Min Elixir"),
-    ("min_dark", "Min Dark (0 = abaikan)"),
-    ("de_full_value", "Stop saat DE ≥ (0 = mati)"),
-    ("speed_up_taps", "Speed-up taps (2 = x4)"),
-    ("end_delay_s", "Max tunggu battle (s)"),
-    ("emulator_path", "Path emulator (ldconsole.exe)"),
-    ("emulator_args", "Argumen emulator"),
+    ("device_address", "Alamat emulator (adb)"),
+    ("min_gold", "Loot minimal: Gold"),
+    ("min_elixir", "Loot minimal: Elixir"),
+    ("min_dark", "Loot minimal: Dark Elixir"),
+    ("de_full_value", "Auto-stop: DE penuh di angka"),
+    ("speed_up_taps", "Percepat battle (2 = x4)"),
+    ("end_delay_s", "Maks tunggu battle (detik)"),
+    ("emulator_path", "File emulator (auto-buka)"),
+)
+FORM_HINT = (
+    "Isi 0 pada 'Loot minimal: Dark Elixir' atau 'Auto-stop' untuk menonaktifkan fitur itu. "
+    "Argumen emulator diatur otomatis."
 )
 ARMY_FIELDS = (
     ("dragon_drops", "Dragon"),
@@ -114,6 +117,10 @@ class App:
             var = tk.StringVar()
             self.form_vars[key] = var
             ttk.Entry(form, textvariable=var, width=18).grid(row=r, column=c * 2 + 1, sticky="w", padx=4)
+        hint_row = (len(FORM_FIELDS) + 1) // 2
+        ttk.Label(form, text=FORM_HINT, foreground="#666", wraplength=520).grid(
+            row=hint_row, column=0, columnspan=4, sticky="w", pady=(6, 0)
+        )
 
         army = ttk.LabelFrame(right, text="Jumlah pasukan (tap per grup)", padding=8)
         army.pack(fill="x", pady=6)
@@ -166,8 +173,6 @@ class App:
             return
         for key, _label in FORM_FIELDS:
             value = data.get(key, "")
-            if key == "emulator_args" and isinstance(value, list):
-                value = " ".join(str(v) for v in value)
             self.form_vars[key].set(str(value))
         army = data.get("army", {})
         for key, _label in ARMY_FIELDS:
@@ -211,8 +216,6 @@ class App:
                 raw = self.form_vars[key].get().strip()
                 if key in ("device_address", "emulator_path"):
                     data[key] = raw
-                elif key == "emulator_args":
-                    data[key] = raw.split()
                 else:
                     data[key] = int(raw)
             army = data.setdefault("army", {})

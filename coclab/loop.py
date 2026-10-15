@@ -150,6 +150,28 @@ class _Session:
             return True
         return False
 
+    def _coc_running(self) -> bool:
+        """True bila aplikasi CoC sedang jalan di device."""
+        try:
+            out = self.deps.adb.shell(self.device, f"pidof {self.cfg.coc_package}")
+        except Exception as exc:  # noqa: BLE001
+            logger.info("pidof gagal (%s); anggap CoC jalan", exc)
+            return True
+        return bool(out.strip())
+
+    def _launch_coc(self) -> None:
+        """CoC close/DC: buka aplikasinya lalu tunggu loading."""
+        logger.warning("CoC tidak jalan — membuka aplikasi CoC...")
+        try:
+            self.deps.adb.shell(
+                self.device,
+                f"monkey -p {self.cfg.coc_package} -c android.intent.category.LAUNCHER 1",
+            )
+            logger.info("Perintah buka CoC terkirim; tunggu loading")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Gagal membuka CoC: %s", exc)
+        self.deps.sleep(30)
+
     def _home_de(self) -> int | None:
         shot = self._capture("home_de.png")
         if shot is None:
@@ -237,6 +259,10 @@ class _Session:
             ):
                 logger.info("Not home yet (result dialogs visible); sweeping to home")
                 self._tap_until_home(max_rounds=6)
+                continue
+            if not self._coc_running():
+                self._launch_coc()
+                deadline = self.deps.monotonic() + self.cfg.find_attack_timeout_s
                 continue
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "attack button not found (timeout)")

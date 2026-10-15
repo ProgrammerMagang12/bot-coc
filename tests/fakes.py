@@ -11,6 +11,7 @@ class RecordingAdb:
         self.taps = []
         self.swipes = []
         self.shells = []
+        self.shell_fn = lambda command: ""
         self.connected = None
 
     def connect(self, addr):
@@ -19,7 +20,7 @@ class RecordingAdb:
 
     def shell(self, device, command):
         self.shells.append(command)
-        return ""
+        return self.shell_fn(command)
 
     def wm_size(self, device):
         return 1600, 900
