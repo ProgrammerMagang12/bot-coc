@@ -151,13 +151,13 @@ class _Session:
         return False
 
     def _coc_running(self) -> bool:
-        """True bila aplikasi CoC sedang jalan di device."""
+        """True bila aplikasi CoC terlihat di daftar proses device."""
         try:
-            out = self.deps.adb.shell(self.device, f"pidof {self.cfg.coc_package}")
+            out = self.deps.adb.shell(self.device, "ps -A")
         except Exception as exc:  # noqa: BLE001
-            logger.info("pidof gagal (%s); anggap CoC jalan", exc)
+            logger.info("ps gagal (%s); anggap CoC jalan", exc)
             return True
-        return bool(out.strip())
+        return self.cfg.coc_package in out
 
     def _launch_coc(self) -> None:
         """CoC close/DC: buka aplikasinya lalu tunggu loading."""
@@ -262,7 +262,7 @@ class _Session:
                 continue
             if not self._coc_running():
                 self._launch_coc()
-                deadline = self.deps.monotonic() + self.cfg.find_attack_timeout_s
+                deadline = self.deps.monotonic() + max(self.cfg.find_attack_timeout_s, 120)
                 continue
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "attack button not found (timeout)")

@@ -348,7 +348,9 @@ def test_find_attack_retries_until_button_appears():
     script = full_script()
     script["attack.png"] = Match(False, 0, 0, 0.1)
     deps, adb = make_deps(script, states)
-    adb.shell_fn = lambda cmd: "1234"  # CoC dianggap jalan → murni tes retry
+    adb.shell_fn = (
+        lambda cmd: "com.supercell.clashofclans" if "ps" in cmd else "ok"
+    )  # CoC dianggap jalan → murni tes retry
     calls = {"n": 0}
     orig = deps.find_template
 
@@ -369,7 +371,7 @@ def test_find_attack_launches_coc_when_closed():
     script = full_script()
     script["attack.png"] = Match(False, 0, 0, 0.1)
     deps, adb = make_deps(script, states)
-    adb.shell_fn = lambda cmd: "" if "pidof" in cmd else "ok"
+    adb.shell_fn = lambda cmd: "" if "ps" in cmd else "ok"
     orig = deps.find_template
 
     def launched():
