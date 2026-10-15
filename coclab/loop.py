@@ -336,21 +336,6 @@ class _Session:
             return 0
         return value
 
-    def _clear_army_slots(self) -> None:
-        """Kosongkan army di panel: loop tandai kartu pertama + tap badge ⊖ (terverifikasi live)."""
-        for _ in range(12):
-            if self.deps.should_stop():
-                return
-            cap = self._panel_capacity()
-            if cap == 0:
-                logger.info("Deck Builder: army kosong (0/352)")
-                return
-            self.actions.tap_percent(0.4731, 0.3333)  # kartu pertama (757,300)
-            self.deps.sleep(0.8)
-            self.actions.tap_percent(0.5044, 0.2833)  # badge ⊖ (807,255) = hapus
-            self.deps.sleep(1.2)
-        logger.info("Deck Builder: clear loop selesai (batas ronde)")
-
     def _build_army(self) -> bool:
         """Deck Builder: mode RESEP (stabil) atau mode BANGUN (klik sesuai data GUI)."""
         ui = self.cfg.train_ui
@@ -386,15 +371,16 @@ class _Session:
                 continue
             self.actions.tap_percent(*point)
             logger.info("Deck Builder: clear %s", key)
-            self.deps.sleep(1.2)
-            if ui.get("clear_confirm") is not None:
-                self.actions.tap_percent(*ui["clear_confirm"])
+            self.deps.sleep(1.3)
+            if ui.get("clear_okay") is not None:
+                self.actions.tap_percent(*ui["clear_okay"])
                 self.deps.sleep(1.5)
-        self._clear_army_slots()
-        self.actions.tap_percent(0.5913, 0.3333)  # buka daftar troop (tap area pasukan)
+        self.actions.tap_percent(0.5913, 0.3333)  # buka daftar troop
         self.deps.sleep(2.0)
         built = 0
         for group, point in ui.get("grid", {}).items():
+            if group in ("rage_spell", "freeze_spell"):
+                continue
             count = int(self.cfg.army.get(group, 0))
             if count <= 0:
                 continue
@@ -405,6 +391,26 @@ class _Session:
                 self.deps.sleep(0.45)
             built += count
             logger.info("Deck Builder: +%d %s", count, group)
+        spell_points = {
+            g: ui["grid"][g]
+            for g in ("rage_spell", "freeze_spell")
+            if g in ui.get("grid", {})
+        }
+        if spell_points and ui.get("spell_edit") is not None:
+            self.actions.tap_percent(*ui["spell_edit"])
+            logger.info("Deck Builder: buka daftar spell")
+            self.deps.sleep(2.0)
+            for group, point in spell_points.items():
+                count = int(self.cfg.army.get(group, 0))
+                if count <= 0:
+                    continue
+                for _ in range(count):
+                    if self.deps.should_stop():
+                        return False
+                    self.actions.tap_percent(*point)
+                    self.deps.sleep(0.45)
+                built += count
+                logger.info("Deck Builder: +%d %s", count, group)
         logger.info("Deck Builder: %d unit diklik; tutup panel", built)
         if ui.get("close_button") is not None:
             self.actions.tap_percent(*ui["close_button"])
