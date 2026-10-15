@@ -172,41 +172,36 @@ class _Session:
             logger.info("Searching opponent...")
             self.deps.sleep(2)
 
-    def _read_number(self, roi: list[float]) -> int | None:
-        shot = self._capture("loot.png")
-        if shot is None:
-            return None
-        crop = self.deps.crop_percent(self._img(shot), *roi)
-        return self.deps.ocr_digits(vision.enhance_numeric_crop(crop))
+    _LOOT_VARIANTS = (4, 6)
+
+    def _read_variant(self, img, roi: list[float], upscale: int) -> int | None:
+        crop = self.deps.crop_percent(img, *roi)
+        return self.deps.ocr_digits(vision.enhance_numeric_crop(crop, upscale=upscale))
 
     def _read_verified(self, roi: list[float]) -> int | None:
-        value = self._read_number(roi)
-        if value is None:
-            return None
-        confirm = self._read_number(roi)
-        if confirm != value:
-            logger.info(
-                "Loot double-read mismatch (%s vs %s); treated as unknown",
-                value,
-                confirm,
-            )
-            return None
-        return value
-
-    def _read_stable(self, roi: list[float]) -> int | None:
-        value = self._read_verified(roi)
-        if value is None:
-            self.deps.sleep(1.0)
-            logger.info("Loot re-read after unreadable/mismatched OCR")
-            value = self._read_verified(roi)
-        return value
+        """Two captures x two enhancement variants; accept only on agreement."""
+        for attempt in range(2):
+            shot = self._capture("loot.png")
+            if shot is None:
+                return None
+            img = self._img(shot)
+            values = [
+                self._read_variant(img, roi, upscale) for upscale in self._LOOT_VARIANTS
+            ]
+            parsed = [v for v in values if v is not None]
+            if len(parsed) == 2 and parsed[0] == parsed[1]:
+                return parsed[0]
+            if attempt == 0:
+                logger.info("Loot read unconfirmed (%s); re-capturing", values)
+                self.deps.sleep(1.0)
+        return None
 
     def evaluate_loot(self) -> StepResult:
         self._state(BotState.LOOT_CHECK)
         self.deps.sleep(self.cfg.loot_settle_s)
-        gold = self._read_stable(self.cfg.loot_roi)
+        gold = self._read_verified(self.cfg.loot_roi)
         elixir = (
-            self._read_stable(self.cfg.loot_roi_elixir) if gold is not None else None
+            self._read_verified(self.cfg.loot_roi_elixir) if gold is not None else None
         )
         if gold is None or elixir is None:
             if self.cfg.on_ocr_fail == "stop":

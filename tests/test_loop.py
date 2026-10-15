@@ -61,11 +61,21 @@ def test_ocr_fail_policy_next_skips_base(tmp_path):
     states = []
     script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
     deps, adb = make_deps(script, states)
-    # ronde 1: gold tak terbaca (None×2) → Next; ronde 2: normal → attack
-    loots = iter([None, None, 999999, 999999, 999999, 999999])
+    # dua capture utk gold semuanya None → skip base; ronde 2 normal → attack
+    loots = iter([None, None, None, None, 999999, 999999, 999999, 999999])
     deps.ocr_digits = lambda img, engine=None: next(loots)
     summary = run(lc(p), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2
+
+
+def test_loot_recovers_on_second_capture():
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    # capture pertama tak terbaca (dua varian None), capture kedua bersih
+    loots = iter([None, None, 999999, 999999, 999999, 999999])
+    deps.ocr_digits = lambda img, engine=None: next(loots)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
 
 
 def test_loot_double_read_mismatch_is_fail_safe(tmp_path):

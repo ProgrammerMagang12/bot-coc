@@ -50,7 +50,7 @@ def test_example_config_matches_spec_defaults():
 
 def test_example_config_loot_settle():
     cfg = load_config(EXAMPLE)
-    assert cfg.loot_settle_s == 1.5
+    assert cfg.loot_settle_s == 3
 
 
 def test_example_config_drop_card_point():
@@ -120,7 +120,7 @@ def test_example_config_dual_thresholds():
     cfg = load_config(EXAMPLE)
     assert cfg.min_gold == 500000
     assert cfg.min_elixir == 500000
-    assert cfg.loot_roi_elixir == [0.041, 0.165, 0.183, 0.222]
+    assert cfg.loot_roi_elixir == [0.050, 0.165, 0.183, 0.222]
 
 
 def test_invalid_min_elixir_rejected(tmp_path):
