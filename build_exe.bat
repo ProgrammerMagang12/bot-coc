@@ -6,6 +6,14 @@ REM  Hasil: dist\GARUDA\GARUDA.exe (+ file data di sampingnya)
 REM ============================================================
 cd /d "%~dp0"
 
+REM --- tutup GARUDA.exe bila sedang jalan (file-nya terkunci saat build) ---
+tasklist /FI "IMAGENAME eq GARUDA.exe" 2>nul | find /I "GARUDA.exe" >nul
+if not errorlevel 1 (
+  echo GARUDA.exe sedang berjalan - menutup dulu...
+  taskkill /IM GARUDA.exe /F >nul
+  timeout /t 2 /nobreak >nul
+)
+
 echo [1/3] Membangun EXE dengan PyInstaller...
 py -m PyInstaller --noconfirm --clean --windowed --name GARUDA ^
   --collect-all rapidocr_onnxruntime --collect-all onnxruntime ^
