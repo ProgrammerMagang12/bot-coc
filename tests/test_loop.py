@@ -501,6 +501,7 @@ def test_build_army_recipe_mode_at_menu(tmp_path):
         "army_button": [0.1125, 0.9478],
         "recipe_tab": [0.5, 0.1022],
         "recipe_use": [0.9338, 0.2589],
+        "recipe_confirm": [0.6113, 0.6467],
         "close_button": [0.965, 0.0911],
     }
     p = tmp_path / "c.json"
@@ -512,6 +513,7 @@ def test_build_army_recipe_mode_at_menu(tmp_path):
     assert (int(0.1125 * 1600), int(0.9478 * 900)) in adb.taps  # Edit Army
     assert (int(0.5 * 1600), int(0.1022 * 900)) in adb.taps  # tab resep
     assert (int(0.9338 * 1600), int(0.2589 * 900)) in adb.taps  # Use
+    assert (int(0.6113 * 1600), int(0.6467 * 900)) in adb.taps  # Okay konfirmasi
     assert (int(0.965 * 1600), int(0.0911 * 900)) in adb.taps  # tutup
 
 

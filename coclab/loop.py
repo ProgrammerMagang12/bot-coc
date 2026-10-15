@@ -370,6 +370,10 @@ class _Session:
             self.actions.tap_percent(*ui["recipe_use"])
             logger.info("Deck Builder: Use resep tersimpan")
             self.deps.sleep(2.5)
+            if ui.get("recipe_confirm") is not None:
+                self.actions.tap_percent(*ui["recipe_confirm"])
+                logger.info("Deck Builder: konfirmasi Use Recipe (Okay)")
+                self.deps.sleep(2.0)
             if ui.get("close_button") is not None:
                 self.actions.tap_percent(*ui["close_button"])
                 self.deps.sleep(2.0)
