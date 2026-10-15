@@ -11,17 +11,21 @@ from __future__ import annotations
 
 import logging
 import queue
+import subprocess
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
 from coclab import profiles
+from coclab.adb import Adb
 from coclab.config import ConfigError, load_config
 from coclab.loop import run
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "config.json" if (ROOT / "config.json").is_file() else ROOT / "config.example.json"
+RUN_UNTIL = 999  # bot jalan sampai: kamu Stop / DE penuh / pasukan habis / gagal
 
 log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
 
@@ -30,10 +34,11 @@ FORM_FIELDS = (
     ("min_gold", "Min Gold"),
     ("min_elixir", "Min Elixir"),
     ("min_dark", "Min Dark (0 = abaikan)"),
+    ("de_full_value", "Stop saat DE ≥ (0 = mati)"),
     ("speed_up_taps", "Speed-up taps (2 = x4)"),
     ("end_delay_s", "Max tunggu battle (s)"),
-    ("threshold", "Template threshold"),
-    ("cycles", "Cycles"),
+    ("emulator_path", "Path emulator (ldconsole.exe)"),
+    ("emulator_args", "Argumen emulator"),
 )
 ARMY_FIELDS = (
     ("dragon_drops", "Dragon"),
@@ -66,7 +71,6 @@ class _Instance:
     def __init__(self) -> None:
         self.thread: threading.Thread | None = None
         self.stop_event = threading.Event()
-        self.cycles = 1
 
     @property
     def running(self) -> bool:
@@ -161,11 +165,10 @@ class App:
             messagebox.showerror("Gagal memuat", str(exc))
             return
         for key, _label in FORM_FIELDS:
-            if key == "cycles":
-                inst = self.instances.get(name)
-                self.form_vars["cycles"].set(str(inst.cycles if inst else 1))
-                continue
-            self.form_vars[key].set(str(data.get(key, "")))
+            value = data.get(key, "")
+            if key == "emulator_args" and isinstance(value, list):
+                value = " ".join(str(v) for v in value)
+            self.form_vars[key].set(str(value))
         army = data.get("army", {})
         for key, _label in ARMY_FIELDS:
             self.army_vars[key].set(str(army.get(key, "")))
@@ -205,15 +208,11 @@ class App:
         try:
             data = profiles.load_profile(name)
             for key, _label in FORM_FIELDS:
-                if key == "cycles":
-                    inst = self.instances.setdefault(name, _Instance())
-                    inst.cycles = max(1, int(self.form_vars["cycles"].get() or 1))
-                    continue
                 raw = self.form_vars[key].get().strip()
-                if key == "device_address":
+                if key in ("device_address", "emulator_path"):
                     data[key] = raw
-                elif key == "threshold":
-                    data[key] = float(raw)
+                elif key == "emulator_args":
+                    data[key] = raw.split()
                 else:
                     data[key] = int(raw)
             army = data.setdefault("army", {})
@@ -250,21 +249,64 @@ class App:
         self._refresh_profiles()
         self.status_var.set(self.status[name])
 
+    def _device_online(self, cfg) -> bool:
+        try:
+            adb = Adb(cfg.adb_path)
+            serial = adb.connect(cfg.device_address)
+            adb.wm_size(serial)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _ensure_emulator(self, name: str, cfg, inst: _Instance) -> bool:
+        """Pastikan emulator + device online; jalankan emulator bila perlu."""
+        if self._device_online(cfg):
+            return True
+        if not cfg.emulator_path:
+            log_queue.put((name, "Device offline & Path emulator kosong — isi di pengaturan."))
+            return False
+        cmd = [cfg.emulator_path, *cfg.emulator_args]
+        log_queue.put((name, f"Emulator belum jalan — menjalankan: {' '.join(cmd)}"))
+        try:
+            subprocess.Popen(cmd)  # noqa: S603 - path dari config user sendiri
+        except OSError as exc:
+            log_queue.put((name, f"Gagal menjalankan emulator: {exc}"))
+            return False
+        adb = Adb(cfg.adb_path)
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            if inst.stop_event.is_set():
+                return False
+            try:
+                serial = adb.connect(cfg.device_address)
+                adb.wm_size(serial)
+                log_queue.put((name, "Emulator online ✓"))
+                return True
+            except Exception:  # noqa: BLE001
+                time.sleep(5)
+        log_queue.put((name, "Timeout menunggu emulator online (180 s)"))
+        return False
+
     def _run_instance(self, name: str, cfg, inst: _Instance) -> None:
         handler = _QueueLogHandler(name)
         handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
         root_logger = logging.getLogger()
         root_logger.addHandler(handler)
-        log_queue.put((name, f">>> START {name} @ {cfg.device_address} ({inst.cycles} cycle)"))
+        log_queue.put((name, f">>> START {name} @ {cfg.device_address} (sampai stop / DE penuh)"))
         try:
+            if not self._ensure_emulator(name, cfg, inst):
+                log_queue.put((name, "<<< FAILED: emulator tidak siap"))
+                self.status[name] = "emulator tidak siap"
+                return
             summary = run(
                 cfg,
                 "live",
-                inst.cycles,
+                RUN_UNTIL,
                 should_stop=inst.stop_event.is_set,
             )
             if summary.ok:
-                line = f"<<< OK: {summary.cycles_done} cycle selesai"
+                extra = f" ({summary.reason})" if summary.reason else ""
+                line = f"<<< OK: {summary.cycles_done} cycle selesai{extra}"
             else:
                 line = f"<<< FAILED: {summary.reason}"
             log_queue.put((name, line))

@@ -330,7 +330,6 @@ def test_disconnect_popup_taps_reload():
     assert session._handle_disconnected(None) is True
     assert (280, 407) in adb.taps
 
-
 def test_no_disconnect_returns_false():
     from coclab.loop import _Session
 
@@ -362,6 +361,32 @@ def test_find_attack_retries_until_button_appears():
     deps.find_template = find_template
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok  # bot waiting + retry, tidak langsung menyerah
+
+
+def test_de_full_stops_and_closes_coc(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["de_full_value"] = 100000
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.read_de = lambda img: 171828
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and "DE" in summary.reason
+    assert adb.shells and "force-stop" in adb.shells[0]
+    assert adb.taps == []  # berhenti sebelum menyerang
+
+
+def test_army_empty_stops_attack():
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.read_badge = lambda img: 1
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "pasukan" in summary.reason
+    end_battle = (int(0.065 * 1600), int(0.75 * 900))
+    assert end_battle in adb.taps  # langsung end battle, tidak deploy
 
 
 def test_army_counts_cycle_strategy_points(tmp_path):

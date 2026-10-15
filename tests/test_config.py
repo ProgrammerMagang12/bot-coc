@@ -149,6 +149,11 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.hero_skill_points == [[0.404, 0.76], [0.445, 0.76]]
     assert cfg.hero_skill_delays_s == [5, 10, 15, 20, 30, 45, 60]
     assert cfg.find_attack_timeout_s == 60
+    assert cfg.emulator_path == ""
+    assert cfg.emulator_args == ["launch", "--index", "0"]
+    assert cfg.de_roi == [0.880, 0.168, 0.960, 0.212]
+    assert cfg.de_full_value == 0
+    assert cfg.coc_package == "com.supercell.clashofclans"
     assert cfg.army == {
         "dragon_drops": 13,
         "balloon_drops": 18,

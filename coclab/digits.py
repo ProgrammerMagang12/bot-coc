@@ -40,21 +40,30 @@ def _load_templates() -> dict[int, list[np.ndarray]]:
     return _templates
 
 
-def segment_glyphs(crop: np.ndarray, min_height: int = 55, max_height: int = 92) -> list[np.ndarray]:
+def segment_glyphs(
+    crop: np.ndarray, scale: int = 4, min_height: int | None = None, max_height: int | None = None
+) -> list[np.ndarray]:
     """Glyph bitmaps left to right.
 
-    Binarize after 4x cubic upscale (keeps inter-digit seams), keep components in
-    the digit height band, then merge boxes that overlap in x (glyphs like "1"
-    split into stem + flag pieces). Heights are measured at 4x; digits are ~74-78px.
+    Binarize after `scale`x cubic upscale (keeps inter-digit seams), keep
+    components in the digit height band, then merge boxes that overlap in x
+    (glyphs like "1" split into stem + flag pieces). Band bounds are calibrated
+    for scale=4 (digit height ~74-78px there) and adjusted proportionally.
     """
+    if min_height is None:
+        min_height = int(55 * scale / 4)
+    if max_height is None:
+        max_height = int(92 * scale / 4)
+    area_min = int(300 * (scale / 4) ** 2)
+    min_w = max(10, int(18 * scale / 4))
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    big_gray = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    big_gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     _, big = cv2.threshold(big_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     n, _labels, stats, _cent = cv2.connectedComponentsWithStats(big, 8)
     boxes: list[list[int]] = []
     for i in range(1, n):
         x, y, w, h, area = (int(v) for v in stats[i])
-        if min_height <= h <= max_height and 18 <= w <= 220 and area >= 300:
+        if min_height <= h <= max_height and min_w <= w <= 220 and area >= area_min:
             boxes.append([x, y, x + w, y + h])
     boxes.sort(key=lambda b: b[0])
     merged: list[list[int]] = []
@@ -88,13 +97,22 @@ def classify_glyph(glyph: np.ndarray) -> str | None:
     return str(best_digit)
 
 
-def read_loot_number(crop: np.ndarray) -> int | None:
+def read_loot_number(
+    crop: np.ndarray,
+    scale: int = 4,
+    min_digits: int = MIN_GLYPHS,
+    max_digits: int = MAX_GLYPHS,
+    min_height: int | None = None,
+    max_height: int | None = None,
+) -> int | None:
     """Read a loot number crop; returns int or None when implausible.
 
     Blobs below the classification confidence threshold are dropped as debris
-    (rocks/grass); real glyphs score far above it.
-    """
-    glyphs = segment_glyphs(crop)
+    (rocks/grass); real glyphs score far above it. `scale` adapts to font size
+    (4 = loot panel/badge, 3 = home resource bars)."""
+    glyphs = segment_glyphs(
+        crop, scale=scale, min_height=min_height, max_height=max_height
+    )
     digits: list[str] = []
     skipped = 0
     for glyph in glyphs:
@@ -105,7 +123,17 @@ def read_loot_number(crop: np.ndarray) -> int | None:
         digits.append(d)
     if skipped:
         logger.info("loot digits: skipped %d non-digit blob(s)", skipped)
-    if not MIN_GLYPHS <= len(digits) <= MAX_GLYPHS:
+    if not min_digits <= len(digits) <= max_digits:
         logger.info("loot digits: implausible glyph count %d", len(digits))
         return None
     return int("".join(digits))
+
+
+def read_badge_number(crop: np.ndarray) -> int | None:
+    """Small counts like card badges 'x13' (1-3 digits)."""
+    return read_loot_number(crop, min_digits=1, max_digits=3)
+
+
+def read_home_number(crop: np.ndarray) -> int | None:
+    """Home resource bar numbers (font ~26px → glyphs 76-79 at 4x, default band)."""
+    return read_loot_number(crop, min_digits=2, max_digits=8)

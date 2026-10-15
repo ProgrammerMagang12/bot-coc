@@ -10,11 +10,16 @@ class RecordingAdb:
     def __init__(self):
         self.taps = []
         self.swipes = []
+        self.shells = []
         self.connected = None
 
     def connect(self, addr):
         self.connected = addr
         return addr
+
+    def shell(self, device, command):
+        self.shells.append(command)
+        return ""
 
     def wm_size(self, device):
         return 1600, 900
@@ -61,6 +66,8 @@ def make_deps(script, states):
         crop_percent=lambda img, *a: img,
         ocr_digits=lambda img, engine=None: 999999,
         read_loot=lambda img: 999999,
+        read_de=lambda img: 0,
+        read_badge=lambda img: 13,
         should_stop=lambda: False,
         ocr_boxes=lambda img: [],
         actions_factory=lambda a, d, m, s: FakeActions(a, d, m, s),

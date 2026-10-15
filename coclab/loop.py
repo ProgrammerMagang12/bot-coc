@@ -43,6 +43,8 @@ class Deps:
     crop_percent: Callable[..., object]
     ocr_digits: Callable[..., int | None]
     read_loot: Callable[..., int | None]
+    read_de: Callable[..., int | None]
+    read_badge: Callable[..., int | None]
     should_stop: Callable[..., bool]
     ocr_boxes: Callable[..., list]
     actions_factory: Callable[..., object]
@@ -64,6 +66,8 @@ def _default_deps(config: Config) -> Deps:
         crop_percent=vision.crop_percent,
         ocr_digits=vision.ocr_digits,
         read_loot=digits.read_loot_number,
+        read_de=digits.read_home_number,
+        read_badge=digits.read_badge_number,
         should_stop=_never_stop,
         ocr_boxes=vision.ocr_text_boxes,
         actions_factory=Actions,
@@ -124,19 +128,70 @@ class _Session:
         except Exception as exc:  # noqa: BLE001 - OCR must never crash the loop
             logger.info("Disconnect OCR failed: %s", exc)
             return False
+        reload_hit: tuple[int, int] | None = None
+        popup_seen = False
         for text, cx, cy in boxes:
             upper = str(text).upper()
             if "RELOAD" in upper:
-                self.actions.tap_px(cx, cy)
-                logger.warning("Inactivity popup: tap RELOAD GAME, waiting for reload")
-                self.deps.sleep(15)
-                return True
-            if "DISCONNECTED" in upper:
-                self.actions.tap_percent(*self.cfg.reload_game_point)
-                logger.warning("Inactivity popup: tap reload point, waiting for reload")
-                self.deps.sleep(15)
-                return True
+                reload_hit = (cx, cy)
+                break
+            if "DISCONNECTED" in upper or "ANYONE" in upper:
+                popup_seen = True
+        if reload_hit is not None:
+            self.actions.tap_px(*reload_hit)
+            logger.warning("Inactivity popup: tap RELOAD GAME, waiting for reload")
+            self.deps.sleep(25)
+            return True
+        if popup_seen:
+            for xp, yp in self.cfg.reload_game_cluster:
+                self.actions.tap_percent(xp, yp)
+            logger.warning("Inactivity popup: tap reload (cluster), waiting for reload")
+            self.deps.sleep(25)
+            return True
         return False
+
+    def _home_de(self) -> int | None:
+        shot = self._capture("home_de.png")
+        if shot is None:
+            return None
+        crop = self.deps.crop_percent(self._img(shot), *self.cfg.de_roi)
+        return self.deps.read_de(crop)
+
+    def _de_full(self) -> bool:
+        """Stop condition: dark elixir storage at capacity → stop + close CoC."""
+        if self.cfg.de_full_value <= 0:
+            return False
+        value = self._home_de()
+        if value is None:
+            logger.info("Home DE unreadable; continue")
+            return False
+        logger.info("Home DE: %s (stop di %s)", value, self.cfg.de_full_value)
+        if value >= self.cfg.de_full_value:
+            logger.warning(
+                "DARK ELIXIR FULL (%s >= %s) — bot berhenti & tutup CoC",
+                value,
+                self.cfg.de_full_value,
+            )
+            try:
+                self.deps.adb.shell(self.device, f"am force-stop {self.cfg.coc_package}")
+                logger.info("CoC ditutup")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Gagal menutup CoC: %s", exc)
+            return True
+        return False
+
+    def _army_ready(self) -> bool:
+        """False when the dragon badge shows an (almost) empty deck."""
+        shot = self._capture("army_check.png")
+        if shot is None:
+            return True
+        crop = self.deps.crop_percent(self._img(shot), *self.cfg.army_badge_roi)
+        value = self.deps.read_badge(crop)
+        if value is None:
+            logger.info("Badge pasukan tak terbaca; anggap siap")
+            return True
+        logger.info("Cek pasukan: dragon x%d", value)
+        return value >= 2
 
     # -- steps -----------------------------------------------------------
 
@@ -334,6 +389,15 @@ class _Session:
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
+        if not self._army_ready():
+            logger.warning(
+                "Pasukan kosong — end battle & berhenti (latih ulang lalu start lagi)"
+            )
+            self.actions.tap_percent(*self.cfg.end_battle_point)
+            self.deps.sleep(0.2)
+            self.actions.tap_percent(*self.cfg.confirm_point)
+            self.deps.sleep(2)
+            return StepResult(False, "army_empty")
         strategies: list = []
         try:
             strategies = self.deps.load_strategies(self.cfg.strategy_file)
@@ -534,6 +598,8 @@ class _Session:
     def run_cycle(self) -> StepResult:
         if self.deps.should_stop():
             return StepResult(False, "stopped by user")
+        if self._de_full():
+            return StepResult(False, "de_full")
         result = self.find_attack()
         if not result.ok:
             return result
@@ -564,6 +630,8 @@ class _Session:
         result = self.return_home()
         if result.ok and self.cfg.wall_upgrade.enabled:
             self._run_wall_upgrade()
+        if result.ok and self._de_full():
+            return StepResult(False, "de_full")
         return result
 
 
@@ -593,6 +661,10 @@ def run(
         for _ in range(cycles):
             result = session.run_cycle()
             if not result.ok:
+                if result.reason == "de_full":
+                    return RunSummary(True, done, "DE penuh — bot berhenti")
+                if result.reason == "army_empty":
+                    return RunSummary(True, done, "pasukan habis — latih ulang & start lagi")
                 return RunSummary(False, done, result.reason)
             done += 1
     except (AdbError, ValueError, OSError) as exc:

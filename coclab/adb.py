@@ -38,6 +38,11 @@ class Adb:
             )
         return out
 
+    def shell(self, device: str, command: str) -> str:
+        """Run `adb -s <device> shell <command>` and return stdout text."""
+        out = self._run([self.adb_path, "-s", device, "shell", *command.split()])
+        return out.decode("utf-8", "replace")
+
     def devices(self) -> list[str]:
         """Online serials from `adb devices`."""
         out = self._run([self.adb_path, "devices"])

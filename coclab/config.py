@@ -61,9 +61,16 @@ class Config:
     min_dark: int
     loot_roi_dark: list[float]
     reload_game_point: list[float]
+    reload_game_cluster: list[list[float]]
     hero_skill_points: list[list[float]]
     hero_skill_delays_s: list[int]
     find_attack_timeout_s: int
+    emulator_path: str
+    emulator_args: list[str]
+    de_roi: list[float]
+    de_full_value: int
+    army_badge_roi: list[float]
+    coc_package: str
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -229,6 +236,12 @@ def load_config(path: str | Path) -> Config:
     reload_game_point = _point(
         data.get("reload_game_point", [0.244, 0.727]), "reload_game_point"
     )
+    cluster_raw = data.get("reload_game_cluster", [[0.16, 0.52], [0.16, 0.60], [0.16, 0.68]])
+    if not isinstance(cluster_raw, list):
+        raise ConfigError("reload_game_cluster: expected a list of [x, y] pairs")
+    reload_game_cluster = [
+        _point(pair, f"reload_game_cluster[{i}]") for i, pair in enumerate(cluster_raw)
+    ]
     skill_raw = data.get("hero_skill_points", [])
     if not isinstance(skill_raw, list):
         raise ConfigError("hero_skill_points: expected a list of [x, y] pairs")
@@ -244,6 +257,17 @@ def load_config(path: str | Path) -> Config:
     ]
     find_attack_timeout_s = _positive_int(
         data.get("find_attack_timeout_s", 60), "find_attack_timeout_s"
+    )
+    emulator_path = str(data.get("emulator_path", ""))
+    args_raw = data.get("emulator_args", ["launch", "--index", "0"])
+    if not isinstance(args_raw, list) or not all(isinstance(a, str) for a in args_raw):
+        raise ConfigError("emulator_args: expected a list of strings")
+    emulator_args = list(args_raw)
+    de_roi = _roi(data.get("de_roi", [0.880, 0.168, 0.960, 0.212]), "de_roi")
+    de_full_value = _nonneg_int(data.get("de_full_value", 0), "de_full_value")
+    army_badge_roi = _roi(data.get("army_badge_roi", [0.070, 0.835, 0.140, 0.895]), "army_badge_roi")
+    coc_package = _nonempty_str(
+        data.get("coc_package", "com.supercell.clashofclans"), "coc_package"
     )
 
     rage_raw = data.get("rage_card")
@@ -290,9 +314,16 @@ def load_config(path: str | Path) -> Config:
         min_dark=min_dark,
         loot_roi_dark=loot_roi_dark,
         reload_game_point=reload_game_point,
+        reload_game_cluster=reload_game_cluster,
         hero_skill_points=hero_skill_points,
         hero_skill_delays_s=hero_skill_delays_s,
         find_attack_timeout_s=find_attack_timeout_s,
+        emulator_path=emulator_path,
+        emulator_args=emulator_args,
+        de_roi=de_roi,
+        de_full_value=de_full_value,
+        army_badge_roi=army_badge_roi,
+        coc_package=coc_package,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,
