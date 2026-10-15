@@ -9,6 +9,7 @@ emulator/akun berbeda — multi-instance jalan paralel per profil).
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import subprocess
