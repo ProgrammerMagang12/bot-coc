@@ -764,11 +764,16 @@ class _Session:
                 return result
             gate = self._army_gate()
             if not gate.ok:
-                if train_attempts < 2 and self._build_army():
+                has_clear = any(
+                    self.cfg.train_ui.get(key) is not None
+                    for key in ("clear_troops", "clear_spells", "clear_siege")
+                )
+                max_build = 2 if has_clear else 1
+                if train_attempts < max_build and self._build_army():
                     logger.info("Deck dibangun ulang (presisi) - ulang siklus")
                     return self.run_cycle(train_attempts + 1)
                 if (
-                    train_attempts < 2
+                    train_attempts < max_build
                     and self.cfg.train_points
                     and self._train_army()
                 ):
