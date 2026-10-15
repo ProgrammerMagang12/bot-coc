@@ -20,10 +20,18 @@ def test_loot_low_clicks_next_and_retries_matchmaking():
     states = []
     script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
     deps, adb = make_deps(script, states)
-    loots = iter([100, 999999])  # pertama rendah, kedua lolos
+    loots = iter([100, 100, 999999, 999999])  # double-read: rendah, lalu lolos
     deps.ocr_digits = lambda img, engine=None: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2
+
+
+def test_loot_double_read_mismatch_is_fail_safe():
+    deps, _ = make_deps(full_script(), [])
+    seq = iter([100, 200])
+    deps.ocr_digits = lambda img, engine=None: next(seq)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "OCR" in summary.reason.upper()
 
 
 def test_ocr_none_stops_by_default():

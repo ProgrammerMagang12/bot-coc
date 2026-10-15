@@ -14,5 +14,6 @@
   "next_max_tries": 5,
   "search_timeout_s": 60,
   "workdir": "work",
-  "assets_dir": "assets"
+  "assets_dir": "assets",
+  "loot_settle_s": 1.5
 }

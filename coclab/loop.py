@@ -166,13 +166,26 @@ class _Session:
             logger.info("Searching opponent...")
             self.deps.sleep(2)
 
-    def evaluate_loot(self) -> StepResult:
-        self._state(BotState.LOOT_CHECK)
+    def _read_loot(self) -> int | None:
         shot = self._capture("loot.png")
         if shot is None:
-            return StepResult(False, "loot capture failed")
+            return None
         crop = self.deps.crop_percent(self._img(shot), *self.cfg.loot_roi)
-        value = self.deps.ocr_digits(vision.enhance_numeric_crop(crop))
+        return self.deps.ocr_digits(vision.enhance_numeric_crop(crop))
+
+    def evaluate_loot(self) -> StepResult:
+        self._state(BotState.LOOT_CHECK)
+        self.deps.sleep(self.cfg.loot_settle_s)
+        value = self._read_loot()
+        if value is not None:
+            confirm = self._read_loot()
+            if confirm != value:
+                logger.info(
+                    "Loot double-read mismatch (%s vs %s); treated as unknown",
+                    value,
+                    confirm,
+                )
+                value = None
         if value is None:
             if self.cfg.on_ocr_fail == "stop":
                 return StepResult(False, "OCR unavailable (policy: stop)")

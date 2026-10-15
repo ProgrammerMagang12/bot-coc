@@ -46,3 +46,17 @@ def test_example_config_matches_spec_defaults():
     assert cfg.end_delay_s == 20
     assert cfg.next_max_tries == 5
     assert cfg.search_timeout_s == 60
+
+
+def test_example_config_loot_settle():
+    cfg = load_config(EXAMPLE)
+    assert cfg.loot_settle_s == 1.5
+
+
+def test_invalid_loot_settle_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["loot_settle_s"] = -1
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="loot_settle_s"):
+        load_config(p)

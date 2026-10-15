@@ -30,6 +30,7 @@ class Config:
     search_timeout_s: int
     workdir: str
     assets_dir: str
+    loot_settle_s: float
 
 
 def _require(data: dict[str, Any], key: str) -> Any:
@@ -57,6 +58,12 @@ def _positive_int(value: Any, field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ConfigError(f"{field}: expected a positive integer")
     return value
+
+
+def _nonneg_number(value: Any, field: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        raise ConfigError(f"{field}: expected a number >= 0")
+    return float(value)
 
 
 def _nonempty_str(value: Any, field: str) -> str:
@@ -121,4 +128,5 @@ def load_config(path: str | Path) -> Config:
         search_timeout_s=_positive_int(_require(data, "search_timeout_s"), "search_timeout_s"),
         workdir=_nonempty_str(_require(data, "workdir"), "workdir"),
         assets_dir=_nonempty_str(_require(data, "assets_dir"), "assets_dir"),
+        loot_settle_s=_nonneg_number(_require(data, "loot_settle_s"), "loot_settle_s"),
     )
