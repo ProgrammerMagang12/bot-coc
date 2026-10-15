@@ -320,14 +320,28 @@ class _Session:
         return gate
 
     def _build_army(self) -> bool:
-        """Deck Builder presisi: clear semua -> bangun sesuai GUI (tap=+1) -> tutup."""
+        """Deck Builder: mode RESEP (stabil, 3 tap) atau mode GRID (clear+build presisi)."""
         ui = self.cfg.train_ui
-        if not ui or "army_button" not in ui or not ui.get("grid"):
+        if not ui or "army_button" not in ui:
             logger.info("train_ui belum dikalibrasi - pakai train_points/manual")
             return False
-        logger.info("Deck Builder: buka panel My Army")
         self.actions.tap_percent(*ui["army_button"])
+        logger.info("Deck Builder: buka panel (Edit Army)")
         self.deps.sleep(2.5)
+        if ui.get("recipe_tab") is not None and ui.get("recipe_use") is not None:
+            self.actions.tap_percent(*ui["recipe_tab"])
+            logger.info("Deck Builder: tab Saved Recipes")
+            self.deps.sleep(1.5)
+            self.actions.tap_percent(*ui["recipe_use"])
+            logger.info("Deck Builder: Use resep tersimpan")
+            self.deps.sleep(2.5)
+            if ui.get("close_button") is not None:
+                self.actions.tap_percent(*ui["close_button"])
+                self.deps.sleep(2.0)
+            return True
+        if not ui.get("grid"):
+            logger.info("train_ui tanpa resep maupun grid - dilewati")
+            return False
         for key in ("clear_troops", "clear_spells", "clear_siege"):
             point = ui.get(key)
             if point is None:
@@ -794,6 +808,12 @@ class _Session:
             return StepResult(False, "de_full")
         self.actions.tap_px(result.data["px"], result.data["py"])
         logger.info("Click Attack")
+        self.deps.sleep(1.0)
+        if self.cfg.train_ui.get("recipe_tab") is not None and self.cfg.train_ui.get(
+            "recipe_use"
+        ) is not None:
+            if self._build_army():
+                logger.info("Deck Builder: resep army dimuat dari menu")
         self.deps.sleep(1.0)
 
         for _ in range(_MAX_LOOT_ROUNDS):

@@ -492,6 +492,28 @@ def test_coc_crash_mid_matchmaking_relaunches(tmp_path):
     assert any("am start" in c for c in adb.shells)  # CoC dibuka ulang
 
 
+def test_build_army_recipe_mode_at_menu(tmp_path):
+    import json
+
+    data = json.loads(EXAMPLE.read_text())
+    data["train_ui"] = {
+        "army_button": [0.1125, 0.9478],
+        "recipe_tab": [0.5, 0.1022],
+        "recipe_use": [0.9338, 0.2589],
+        "close_button": [0.965, 0.0911],
+    }
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and summary.cycles_done == 1
+    assert (int(0.1125 * 1600), int(0.9478 * 900)) in adb.taps  # Edit Army
+    assert (int(0.5 * 1600), int(0.1022 * 900)) in adb.taps  # tab resep
+    assert (int(0.9338 * 1600), int(0.2589 * 900)) in adb.taps  # Use
+    assert (int(0.965 * 1600), int(0.0911 * 900)) in adb.taps  # tutup
+
+
 def test_army_mismatch_trains_then_retries(tmp_path):
     import json
 
