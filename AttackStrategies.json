@@ -2,9 +2,9 @@
   "strategies": [
     {
       "name": "Malam2",
-      "dragon_drops": [[0.15, 0.6], [0.165, 0.57], [0.155, 0.64]],
-      "balloon_drops": [[0.13, 0.61], [0.135, 0.66]],
-      "wall_wrecker_drop": [0.16, 0.615]
+      "dragon_drops": [[0.155, 0.65], [0.145, 0.61], [0.165, 0.615]],
+      "balloon_drops": [[0.135, 0.65], [0.13, 0.61]],
+      "wall_wrecker_drop": [0.155, 0.63]
     }
   ]
 }
