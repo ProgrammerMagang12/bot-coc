@@ -562,6 +562,25 @@ def test_build_mode_clears_then_taps_grid(tmp_path):
     assert adb.taps.count((int(0.27 * 1600), int(0.68 * 900))) == 1
 
 
+def test_waits_for_menu_detects_template(tmp_path):
+    from coclab.loop import _Session
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
+    assert session._waits_for_menu() is True
+
+    script = full_script()
+    script["find_match.png"] = Match(False, 0, 0, 0.1)
+    deps2, _adb2 = make_deps(script, [])
+    session2 = _Session(load_config(EXAMPLE), "observe", deps2)
+    session2.device = "127.0.0.1:5555"
+    session2.actions = deps2.actions_factory(deps2.adb, session2.device, "observe", (1600, 900))
+    assert session2._waits_for_menu(tries=3) is False
+
+
 def test_army_mismatch_trains_then_retries(tmp_path):
     import json
 

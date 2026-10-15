@@ -336,6 +336,15 @@ class _Session:
             return 0
         return value
 
+    def _waits_for_menu(self, tries: int = 6) -> bool:
+        """True bila layar menu multiplayer terlihat (ada tombol Find a Match)."""
+        for _ in range(tries):
+            shot = self._capture("menu_check.png")
+            if shot is not None and self._match_safe(shot, "find_match.png").found:
+                return True
+            self.deps.sleep(1.0)
+        return False
+
     def _build_army(self) -> bool:
         """Deck Builder: mode RESEP (stabil) atau mode BANGUN (klik sesuai data GUI)."""
         ui = self.cfg.train_ui
@@ -856,13 +865,28 @@ class _Session:
         self.actions.tap_px(result.data["px"], result.data["py"])
         logger.info("Click Attack")
         self.deps.sleep(1.0)
-        if (
+        menu_ok = self._waits_for_menu()
+        if not menu_ok:
+            logger.warning("Menu multiplayer tidak terdeteksi - builder dilewati")
+            try:
+                self.deps.adb.shell(self.device, "input keyevent 4")
+            except Exception:  # noqa: BLE001
+                pass
+            self.deps.sleep(1.5)
+        if menu_ok and (
             self.cfg.train_mode == "quick_train"
             and self.cfg.train_ui.get("recipe_tab") is not None
             and self.cfg.train_ui.get("recipe_use") is not None
         ):
             if self._build_army():
                 logger.info("Deck Builder: pasukan dimuat (mode resep)")
+                if not self._waits_for_menu(tries=3):
+                    logger.warning("Builder tidak kembali ke menu - tekan BACK")
+                    try:
+                        self.deps.adb.shell(self.device, "input keyevent 4")
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.deps.sleep(1.5)
         self.deps.sleep(1.0)
 
         for _ in range(_MAX_LOOT_ROUNDS):
