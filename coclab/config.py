@@ -81,6 +81,12 @@ class Config:
     card_detection: bool
     card_threshold: float
     extra_troop_template: str | None
+    deck_strict_types: list[str]
+    deploy_jitter_px: int
+    mirror_strategies: bool
+    tap_delay_jitter_pct: int
+    another_device_wait_s: int
+    connection_lost_point: list[float] | None
     army: dict[str, int]
     wall_upgrade: WallUpgradeConfig
 
@@ -335,6 +341,24 @@ def load_config(path: str | Path) -> Config:
         else _nonempty_str(extra_tpl_raw, "extra_troop_template")
     )
 
+    strict_raw = data.get("deck_strict_types", ["dragon", "balloon", "extra", "rage", "freeze"])
+    if not isinstance(strict_raw, list) or not all(
+        isinstance(v, str) and v.strip() for v in strict_raw
+    ):
+        raise ConfigError("deck_strict_types: expected a list of strings")
+    deck_strict_types = [str(v).strip() for v in strict_raw]
+    deploy_jitter_px = _nonneg_int(data.get("deploy_jitter_px", 38), "deploy_jitter_px")
+    mirror_strategies = _bool(data.get("mirror_strategies", True), "mirror_strategies")
+    pct_raw = data.get("tap_delay_jitter_pct", 30)
+    if not isinstance(pct_raw, int) or isinstance(pct_raw, bool) or not 0 <= pct_raw <= 90:
+        raise ConfigError("tap_delay_jitter_pct: expected an integer between 0 and 90")
+    tap_delay_jitter_pct = int(pct_raw)
+    another_device_wait_s = _positive_int(
+        data.get("another_device_wait_s", 30), "another_device_wait_s"
+    )
+    lost_raw = data.get("connection_lost_point")
+    connection_lost_point = None if lost_raw is None else _point(lost_raw, "connection_lost_point")
+
     army_raw = data.get("army", {})
     if not isinstance(army_raw, dict):
         raise ConfigError("army: expected an object of troop counts")
@@ -394,6 +418,12 @@ def load_config(path: str | Path) -> Config:
         card_detection=card_detection,
         card_threshold=card_threshold,
         extra_troop_template=extra_troop_template,
+        deck_strict_types=deck_strict_types,
+        deploy_jitter_px=deploy_jitter_px,
+        mirror_strategies=mirror_strategies,
+        tap_delay_jitter_pct=tap_delay_jitter_pct,
+        another_device_wait_s=another_device_wait_s,
+        connection_lost_point=connection_lost_point,
         army=army,
         wall_upgrade=wall_upgrade,
     )
