@@ -31,8 +31,10 @@ class Config:
     adb_path: str
     device_address: str
     threshold: float
-    min_resource: int
+    min_gold: int
+    min_elixir: int
     loot_roi: list[float]
+    loot_roi_elixir: list[float]
     on_ocr_fail: str
     drop_card_point: list[float]
     drop_points: list[list[float]]
@@ -131,6 +133,7 @@ def load_config(path: str | Path) -> Config:
         raise ConfigError("threshold: expected a number greater than 0 and at most 1")
 
     loot_roi = _roi(_require(data, "loot_roi"), "loot_roi")
+    loot_roi_elixir = _roi(_require(data, "loot_roi_elixir"), "loot_roi_elixir")
 
     drop_raw = _require(data, "drop_points")
     if not isinstance(drop_raw, (list, tuple)) or not drop_raw:
@@ -183,8 +186,10 @@ def load_config(path: str | Path) -> Config:
         adb_path=_nonempty_str(_require(data, "adb_path"), "adb_path"),
         device_address=_nonempty_str(_require(data, "device_address"), "device_address"),
         threshold=float(threshold),
-        min_resource=_positive_int(_require(data, "min_resource"), "min_resource"),
+        min_gold=_positive_int(_require(data, "min_gold"), "min_gold"),
+        min_elixir=_positive_int(_require(data, "min_elixir"), "min_elixir"),
         loot_roi=loot_roi,
+        loot_roi_elixir=loot_roi_elixir,
         on_ocr_fail=on_ocr_fail,
         drop_card_point=_point(_require(data, "drop_card_point"), "drop_card_point"),
         drop_points=[_point(pair, "drop_points") for pair in drop_raw],

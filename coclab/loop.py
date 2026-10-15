@@ -172,35 +172,53 @@ class _Session:
             logger.info("Searching opponent...")
             self.deps.sleep(2)
 
-    def _read_loot(self) -> int | None:
+    def _read_number(self, roi: list[float]) -> int | None:
         shot = self._capture("loot.png")
         if shot is None:
             return None
-        crop = self.deps.crop_percent(self._img(shot), *self.cfg.loot_roi)
+        crop = self.deps.crop_percent(self._img(shot), *roi)
         return self.deps.ocr_digits(vision.enhance_numeric_crop(crop))
+
+    def _read_verified(self, roi: list[float]) -> int | None:
+        value = self._read_number(roi)
+        if value is None:
+            return None
+        confirm = self._read_number(roi)
+        if confirm != value:
+            logger.info(
+                "Loot double-read mismatch (%s vs %s); treated as unknown",
+                value,
+                confirm,
+            )
+            return None
+        return value
 
     def evaluate_loot(self) -> StepResult:
         self._state(BotState.LOOT_CHECK)
         self.deps.sleep(self.cfg.loot_settle_s)
-        value = self._read_loot()
-        if value is not None:
-            confirm = self._read_loot()
-            if confirm != value:
-                logger.info(
-                    "Loot double-read mismatch (%s vs %s); treated as unknown",
-                    value,
-                    confirm,
-                )
-                value = None
-        if value is None:
+        gold = self._read_verified(self.cfg.loot_roi)
+        elixir = (
+            self._read_verified(self.cfg.loot_roi_elixir) if gold is not None else None
+        )
+        if gold is None or elixir is None:
             if self.cfg.on_ocr_fail == "stop":
                 return StepResult(False, "OCR unavailable (policy: stop)")
             logger.warning("OCR unavailable; continuing (policy: attack)")
             return StepResult(True)
-        logger.info("Loot: %s (min %s)", value, self.cfg.min_resource)
-        if value >= self.cfg.min_resource:
+        logger.info(
+            "Loot: gold %s (min %s) | elixir %s (min %s)",
+            gold,
+            self.cfg.min_gold,
+            elixir,
+            self.cfg.min_elixir,
+        )
+        if gold >= self.cfg.min_gold and elixir >= self.cfg.min_elixir:
             return StepResult(True)
-        logger.info("Loot low: %s < %s, continue search", value, self.cfg.min_resource)
+        logger.info(
+            "Loot low: gold %s / elixir %s below thresholds, continue search",
+            gold,
+            elixir,
+        )
         return StepResult(False, "loot_low")
 
     def click_next(self) -> StepResult:

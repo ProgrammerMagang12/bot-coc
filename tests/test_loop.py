@@ -20,7 +20,19 @@ def test_loot_low_clicks_next_and_retries_matchmaking():
     states = []
     script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
     deps, adb = make_deps(script, states)
-    loots = iter([100, 100, 999999, 999999])  # double-read: rendah, lalu lolos
+    # per ronde: gold read1,read2 lalu elixir read1,read2
+    loots = iter([100, 100, 50, 50, 999999, 999999, 999999, 999999])
+    deps.ocr_digits = lambda img, engine=None: next(loots)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and states.count("MATCHMAKING") == 2
+
+
+def test_elixir_threshold_enforced():
+    states = []
+    script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
+    deps, adb = make_deps(script, states)
+    # gold tinggi, elixir rendah → tetap loot_low
+    loots = iter([999999, 999999, 10, 10, 999999, 999999, 999999, 999999])
     deps.ocr_digits = lambda img, engine=None: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and states.count("MATCHMAKING") == 2

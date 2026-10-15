@@ -55,3 +55,32 @@ def test_all_groups_empty_rejected(tmp_path):
     p = _write(tmp_path, {"strategies": [{"name": "A"}]})
     with pytest.raises(StrategyError, match="at least one"):
         load_strategies(p)
+
+
+def test_optional_hero_and_spell_positions_parsed(tmp_path):
+    p = _write(
+        tmp_path,
+        {
+            "strategies": [
+                {
+                    "name": "A",
+                    "dragon_drops": [[0.1, 0.1]],
+                    "hero_positions": [[0.2, 0.2]],
+                    "rage_spell_positions": [[0.3, 0.3]],
+                    "freeze_spell_positions": [[0.4, 0.4]],
+                }
+            ]
+        },
+    )
+    s = load_strategies(p)[0]
+    assert s.hero_positions == [[0.2, 0.2]]
+    assert s.rage_spell_positions == [[0.3, 0.3]]
+    assert s.freeze_spell_positions == [[0.4, 0.4]]
+
+
+def test_optional_positions_default_empty(tmp_path):
+    p = _write(tmp_path, {"strategies": [{"name": "A", "dragon_drops": [[0.1, 0.1]]}]})
+    s = load_strategies(p)[0]
+    assert s.hero_positions == []
+    assert s.rage_spell_positions == []
+    assert s.freeze_spell_positions == []

@@ -114,3 +114,19 @@ def test_invalid_drag_deploy_rejected(tmp_path):
     p.write_text(json.dumps(data))
     with pytest.raises(ConfigError, match="drag_deploy_ms"):
         load_config(p)
+
+
+def test_example_config_dual_thresholds():
+    cfg = load_config(EXAMPLE)
+    assert cfg.min_gold == 500000
+    assert cfg.min_elixir == 500000
+    assert cfg.loot_roi_elixir == [0.041, 0.165, 0.183, 0.222]
+
+
+def test_invalid_min_elixir_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["min_elixir"] = -1
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="min_elixir"):
+        load_config(p)

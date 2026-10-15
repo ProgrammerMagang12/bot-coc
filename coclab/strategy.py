@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,9 @@ class Strategy:
     dragon_drops: list[list[float]]
     balloon_drops: list[list[float]]
     wall_wrecker_drop: list[float] | None
+    hero_positions: list[list[float]] = field(default_factory=list)
+    rage_spell_positions: list[list[float]] = field(default_factory=list)
+    freeze_spell_positions: list[list[float]] = field(default_factory=list)
 
 
 def _point(value: Any, where: str) -> list[float]:
@@ -74,12 +77,24 @@ def load_strategies(path: str | Path) -> list[Strategy]:
         )
         if not dragon and not balloon and wrecker is None:
             raise StrategyError(f"{where}: needs at least one drop group")
+        hero_positions = _points(
+            item.get("hero_positions", []), f"{where}.hero_positions"
+        )
+        rage_spell_positions = _points(
+            item.get("rage_spell_positions", []), f"{where}.rage_spell_positions"
+        )
+        freeze_spell_positions = _points(
+            item.get("freeze_spell_positions", []), f"{where}.freeze_spell_positions"
+        )
         strategies.append(
             Strategy(
                 name=name.strip(),
                 dragon_drops=dragon,
                 balloon_drops=balloon,
                 wall_wrecker_drop=wrecker,
+                hero_positions=hero_positions,
+                rage_spell_positions=rage_spell_positions,
+                freeze_spell_positions=freeze_spell_positions,
             )
         )
     return strategies
