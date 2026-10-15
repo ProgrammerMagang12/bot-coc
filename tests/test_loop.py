@@ -154,8 +154,12 @@ def test_run_reports_clean_failure_when_template_missing():
         raise ValueError("cannot read image: assets\\attack.png")
 
     deps.find_template = boom
+    # Template tak terbaca kini = "tidak ketemu" (graceful); alur harus berakhir
+    # dengan timeout bersih, bukan crash atau loop tak berujung.
+    t = [-10]
+    deps.monotonic = lambda: t.__setitem__(0, t[0] + 10) or t[0]  # +10s tiap panggilan
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
-    assert not summary.ok and "attack.png" in summary.reason
+    assert not summary.ok and "timeout" in summary.reason.lower()
 
 
 def test_observe_mode_never_taps_end_to_end():
@@ -1174,3 +1178,17 @@ def test_mirror_picks_mirrored_scenario(monkeypatch):
     assert summary.ok
     # asli [0.1] → cermin [0.9]: tx ∈ [1440−38, 1440]
     assert any(1402 <= tx <= 1441 and 421 <= ty <= 450 for tx, ty in adb.taps)
+
+
+def test_find_attack_event_button_recognized():
+    """Tombol Battle skin event (Treasure Hunt) dikenali saat attack.png tidak match."""
+    from coclab.vision import Match
+
+    script = full_script()
+    del script["attack.png"]
+    script["attack_event.png"] = Match(True, 92, 813, 0.95)
+    states = []
+    deps, adb = make_deps(script, states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert (92, 813) in adb.taps

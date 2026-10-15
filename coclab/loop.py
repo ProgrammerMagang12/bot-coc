@@ -128,6 +128,13 @@ class _Session:
             logger.info("Template %s unreadable (%s); skipped", template, exc)
             return vision.Match(False, 0, 0, 0.0)
 
+    def _home_attack_match(self, shot: Path) -> vision.Match:
+        """Tombol Battle di home: template normal ATAU versi event (skin Treasure Hunt)."""
+        match = self._match_safe(shot, "attack.png")
+        if match.found:
+            return match
+        return self._match_safe(shot, "attack_event.png")
+
     def _handle_afk_reload(self, shot: Path) -> bool:
         """'Anyone there? RELOAD GAME' popup: tap RELOAD and wait for the game to return."""
         try:
@@ -598,7 +605,7 @@ class _Session:
                 return StepResult(False, "attack screen capture failed")
             if self._handle_popups(shot):
                 continue
-            match = self._match(shot, "attack.png")
+            match = self._home_attack_match(shot)
             if match.found:
                 logger.info("Attack button found (score %.2f)", match.score)
                 self._zoom_out()
@@ -1041,7 +1048,7 @@ class _Session:
             if shot is None:
                 self.deps.sleep(2.5)
                 continue
-            if self._match_safe(shot, "attack.png").found:
+            if self._home_attack_match(shot).found:
                 return True
             if self._match_safe(shot, "continue.png").found:
                 match = self._match_safe(shot, "continue.png")
@@ -1061,13 +1068,13 @@ class _Session:
                 logger.info("Tap popup Okay (star bonus point)")
                 self.deps.sleep(2.0)
                 shot2 = self._capture("until_home.png")
-                if shot2 is not None and self._match_safe(shot2, "attack.png").found:
+                if shot2 is not None and self._home_attack_match(shot2).found:
                     return True
                 self.actions.tap_percent(*self.cfg.notifications_not_now_point)
                 logger.info("Tap Not Now (notifications point)")
             self.deps.sleep(2.5)
         shot = self._capture("until_home.png")
-        return shot is not None and self._match_safe(shot, "attack.png").found
+        return shot is not None and self._home_attack_match(shot).found
 
     def _run_wall_upgrade(self) -> None:
         """Optional wall upgrade after returning home; failures never break the cycle."""
