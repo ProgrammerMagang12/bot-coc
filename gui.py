@@ -16,15 +16,15 @@ import subprocess
 import threading
 import time
 import tkinter as tk
-from pathlib import Path
 from tkinter import ttk
 
 from coclab import profiles
 from coclab.adb import Adb
 from coclab.config import ConfigError, load_config
 from coclab.loop import run
+from coclab.paths import base_dir
 
-ROOT = Path(__file__).resolve().parent
+ROOT = base_dir()
 TEMPLATE = ROOT / "config.json" if (ROOT / "config.json").is_file() else ROOT / "config.example.json"
 RUN_UNTIL = 999  # bot jalan sampai: kamu Stop / DE penuh / pasukan habis / gagal
 

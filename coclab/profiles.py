@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-PROFILES_DIR = Path(__file__).resolve().parent.parent / "profiles"
+from coclab.paths import base_dir
+
+PROFILES_DIR = base_dir() / "profiles"
 
 # field yang bisa diedit cepat dari GUI (sisanya tetap ikut file)
 EDITABLE_FIELDS = (

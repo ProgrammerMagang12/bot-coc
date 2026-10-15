@@ -8,14 +8,15 @@ per-digit template matching is deterministic. Templates live in assets/digits/
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import cv2
 import numpy as np
 
+from coclab.paths import base_dir
+
 logger = logging.getLogger(__name__)
 
-TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "digits"
+TEMPLATE_DIR = base_dir() / "assets" / "digits"
 NORM_SIZE = (14, 20)  # (w, h)
 MIN_GLYPHS, MAX_GLYPHS = 3, 7  # loot numbers are 3-7 digits
 MIN_SCORE = 0.80  # real digits score ~0.95-1.0; background blobs ~0.6
