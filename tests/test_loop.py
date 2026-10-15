@@ -1192,3 +1192,31 @@ def test_find_attack_event_button_recognized():
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok and "ATTACK" in states
     assert (92, 813) in adb.taps
+
+
+def test_pause_gate_blocks_taps_until_resume():
+    """Selama pause: nol tap; resume → siklus selesai dari titik yang sama."""
+    deps, adb = make_deps(full_script(), [])
+    paused = {"v": True}
+    polls = {"n": 0}
+    base_sleep = deps.sleep
+
+    def spy_sleep(seconds):
+        if paused["v"]:
+            polls["n"] += 1
+            if polls["n"] >= 3:
+                paused["v"] = False  # pengguna menekan Resume setelah 3 poll
+        base_sleep(seconds)
+
+    deps.sleep = spy_sleep
+    base_tap = adb.tap
+
+    def trap_tap(device, x, y):
+        assert not paused["v"], "tap dilakukan saat paused!"
+        return base_tap(device, x, y)
+
+    adb.tap = trap_tap
+    summary = run(
+        load_config(EXAMPLE), "observe", 1, deps=deps, is_paused=lambda: paused["v"]
+    )
+    assert summary.ok and polls["n"] >= 3
