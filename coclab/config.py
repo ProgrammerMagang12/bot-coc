@@ -29,6 +29,7 @@ class Config:
     next_max_tries: int
     search_timeout_s: int
     workdir: str
+    assets_dir: str
 
 
 def _require(data: dict[str, Any], key: str) -> Any:
@@ -119,4 +120,5 @@ def load_config(path: str | Path) -> Config:
         next_max_tries=_positive_int(_require(data, "next_max_tries"), "next_max_tries"),
         search_timeout_s=_positive_int(_require(data, "search_timeout_s"), "search_timeout_s"),
         workdir=_nonempty_str(_require(data, "workdir"), "workdir"),
+        assets_dir=_nonempty_str(_require(data, "assets_dir"), "assets_dir"),
     )

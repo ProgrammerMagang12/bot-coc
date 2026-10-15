@@ -13,5 +13,6 @@
   "return_home_point": [0.497, 0.849],
   "next_max_tries": 5,
   "search_timeout_s": 60,
-  "workdir": "work"
+  "workdir": "work",
+  "assets_dir": "assets"
 }
