@@ -245,13 +245,36 @@ class _Session:
             self.deps.sleep(2)
         return StepResult(False, "next button not found")
 
-    def _drop_group(self, card_key: str, points: list) -> None:
+    def _drop_group(
+        self,
+        card_key: str,
+        points: list,
+        count: int | None = None,
+        card_point: list[float] | None = None,
+    ) -> None:
         if not points:
             return
-        self.actions.tap_percent(*self.cfg.card_points[card_key])
+        point = card_point if card_point is not None else self.cfg.card_points[card_key]
+        self.actions.tap_percent(*point)
         logger.info("Select %s card", card_key)
         self.deps.sleep(0.5)
-        for xp, yp in points:
+        taps = len(points) if count is None else max(count, 0)
+        for i in range(taps):
+            xp, yp = points[i % len(points)]
+            self.actions.tap_percent(xp, yp)
+            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+
+    def _drop_heroes(self, chosen) -> None:
+        if not self.cfg.hero_cards:
+            return
+        if not chosen.hero_positions:
+            logger.info("Scenario has no hero positions; heroes skipped")
+            return
+        for i, card in enumerate(self.cfg.hero_cards):
+            xp, yp = chosen.hero_positions[i % len(chosen.hero_positions)]
+            self.actions.tap_percent(*card)
+            logger.info("Deploy hero %d", i + 1)
+            self.deps.sleep(0.4)
             self.actions.tap_percent(xp, yp)
             self.deps.sleep(self.cfg.tap_delay_ms / 1000)
 
@@ -266,10 +289,26 @@ class _Session:
         if strategies:
             chosen = random.choice(strategies)
             logger.info("Executing Scenario: %s", chosen.name)
-            self._drop_group("dragon", chosen.dragon_drops)
-            self._drop_group("balloon", chosen.balloon_drops)
+            army = self.cfg.army
             if chosen.wall_wrecker_drop is not None:
-                self._drop_group("wall_wrecker", [chosen.wall_wrecker_drop])
+                self._drop_group(
+                    "wall_wrecker",
+                    [chosen.wall_wrecker_drop],
+                    count=army.get("wall_wrecker_drop", 1),
+                )
+            self._drop_group("dragon", chosen.dragon_drops, count=army.get("dragon_drops"))
+            self._drop_group(
+                "balloon", chosen.balloon_drops, count=army.get("balloon_drops")
+            )
+            extra_count = army.get("extra_troop", 0)
+            if self.cfg.extra_troop_card is not None and extra_count > 0:
+                self._drop_group(
+                    "extra_troop",
+                    chosen.dragon_drops,
+                    count=extra_count,
+                    card_point=self.cfg.extra_troop_card,
+                )
+            self._drop_heroes(chosen)
         else:
             logger.info("No strategies loaded; legacy single drop")
             self.actions.tap_percent(*self.cfg.drop_card_point)
@@ -298,6 +337,9 @@ class _Session:
                 shot, "returnhome_event.png"
             ).found:
                 break
+            claim = self._match_safe(shot, "claim_reward.png")
+            if claim.found:
+                return self._claim_event_reward(claim)
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "return home timeout")
             self.deps.sleep(10)
@@ -305,6 +347,26 @@ class _Session:
         logger.info("Tap Return Home")
         self.deps.sleep(8)
         return StepResult(True)
+
+    def _claim_event_reward(self, claim) -> StepResult:
+        """Event result screen: Claim Reward -> open chest (4 taps) -> Continue -> home."""
+        self.actions.tap_px(claim.cx, claim.cy)
+        logger.info("Tap Claim Reward (event chest)")
+        self.deps.sleep(2)
+        for _ in range(4):
+            self.actions.tap_percent(0.5, 0.5)
+            self.deps.sleep(1.2)
+        logger.info("Chest opened; tapping Continue until home")
+        for _ in range(3):
+            self.actions.tap_percent(*self.cfg.continue_point)
+            self.deps.sleep(3)
+            shot = self._capture("event_continue.png")
+            if shot is None:
+                continue
+            if self._match_safe(shot, "attack.png").found:
+                logger.info("Back home after event claim")
+                return StepResult(True)
+        return StepResult(False, "event reward: continue failed")
 
     def _run_wall_upgrade(self) -> None:
         """Optional wall upgrade after returning home; failures never break the cycle."""

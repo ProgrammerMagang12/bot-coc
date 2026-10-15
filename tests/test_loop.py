@@ -219,21 +219,109 @@ def test_multi_drop_attack_taps_cards_then_points():
     summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
     assert adb.swipes == []
-    assert adb.taps == [
-        (1, 1),
-        (1, 1),
-        (600, 700),  # attack, find_match, attack2
-        (int(0.091 * 1600), int(0.933 * 900)),  # kartu dragon
+    assert adb.taps[:3] == [(1, 1), (1, 1), (600, 700)]
+    body = adb.taps[3:]
+    # wrecker dulu (urutan CROWZ), lalu dragon, balloon, extra troop (amount dari army)
+    assert body[0] == (int(0.325 * 1600), int(0.933 * 900))
+    assert body[1] == (int(0.36 * 1600), int(0.66 * 900))
+    assert body[2] == (int(0.091 * 1600), int(0.933 * 900))
+    dragon = body[3:16]  # army dragon_drops=13 → siklus 2 titik
+    assert len(dragon) == 13
+    assert dragon[0] == (int(0.30 * 1600), int(0.60 * 900))
+    assert dragon[1] == (int(0.32 * 1600), int(0.62 * 900))
+    assert body[16] == (int(0.166 * 1600), int(0.933 * 900))
+    assert body[17:33] == [(int(0.34 * 1600), int(0.64 * 900))] * 16
+    assert body[33] == (int(0.24 * 1600), int(0.933 * 900))
+    assert body[34:37] == [
         (int(0.30 * 1600), int(0.60 * 900)),
         (int(0.32 * 1600), int(0.62 * 900)),
-        (int(0.166 * 1600), int(0.933 * 900)),  # kartu balloon
-        (int(0.34 * 1600), int(0.64 * 900)),
-        (int(0.325 * 1600), int(0.933 * 900)),  # kartu wrecker
-        (int(0.36 * 1600), int(0.66 * 900)),
-        (int(0.065 * 1600), int(0.75 * 900)),  # end battle
-        (int(0.614 * 1600), int(0.648 * 900)),  # confirm
-        (int(0.497 * 1600), int(0.849 * 900)),  # return home
+        (int(0.30 * 1600), int(0.60 * 900)),
     ]
+    assert body[37:] == [
+        (int(0.065 * 1600), int(0.75 * 900)),
+        (int(0.614 * 1600), int(0.648 * 900)),
+        (int(0.497 * 1600), int(0.849 * 900)),
+    ]
+
+
+def test_army_counts_cycle_strategy_points(tmp_path):
+    import json
+
+    from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["army"] = {"dragon_drops": 5, "balloon_drops": 1, "wall_wrecker_drop": 1}
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="T",
+            dragon_drops=[[0.10, 0.10], [0.20, 0.20]],
+            balloon_drops=[[0.30, 0.30]],
+            wall_wrecker_drop=None,
+        )
+    ]
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok
+    cycle = [(int(0.10 * 1600), int(0.10 * 900)), (int(0.20 * 1600), int(0.20 * 900))]
+    assert [t for t in adb.taps if t in cycle] == [
+        cycle[0],
+        cycle[1],
+        cycle[0],
+        cycle[1],
+        cycle[0],
+    ]
+
+
+def test_heroes_deployed_at_scenario_positions():
+    from coclab.strategy import Strategy
+
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="H",
+            dragon_drops=[[0.50, 0.50]],
+            balloon_drops=[[0.51, 0.51]],
+            wall_wrecker_drop=None,
+            hero_positions=[[0.30, 0.40], [0.70, 0.60]],
+        )
+    ]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    hero1_card = (int(0.424 * 1600), int(0.91 * 900))
+    hero2_card = (int(0.502 * 1600), int(0.91 * 900))
+    pos1 = (int(0.30 * 1600), int(0.40 * 900))
+    pos2 = (int(0.70 * 1600), int(0.60 * 900))
+    assert adb.taps.index(hero1_card) < adb.taps.index(pos1)
+    assert adb.taps.index(pos1) < adb.taps.index(hero2_card)
+    assert adb.taps.index(hero2_card) < adb.taps.index(pos2)
+
+
+def test_return_home_event_claim_flow():
+    from coclab.strategy import Strategy
+
+    states = []
+    script = full_script()
+    del script["returnhome.png"]
+    script["claim_reward.png"] = Match(True, 798, 770, 0.97)
+    deps, adb = make_deps(script, states)
+    deps.load_strategies = lambda path: [
+        Strategy(
+            name="E",
+            dragon_drops=[[0.20, 0.20]],
+            balloon_drops=[[0.21, 0.21]],
+            wall_wrecker_drop=None,
+        )
+    ]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert (798, 770) in adb.taps  # tap Claim Reward di posisi hasil template match
+    assert adb.taps.count((800, 450)) == 4  # buka chest: 4x tap layar
+    cont = (int(0.49 * 1600), int(0.78 * 900))
+    assert cont in adb.taps  # tap Continue sampai home
 
 
 def test_wall_upgrade_wired_when_enabled(monkeypatch, tmp_path):

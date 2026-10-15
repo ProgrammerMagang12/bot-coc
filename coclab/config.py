@@ -51,6 +51,10 @@ class Config:
     loot_settle_s: float
     strategy_file: str
     card_points: dict[str, list[float]]
+    hero_cards: list[list[float]]
+    extra_troop_card: list[float] | None
+    continue_point: list[float]
+    army: dict[str, int]
     wall_upgrade: WallUpgradeConfig
 
 
@@ -182,6 +186,21 @@ def load_config(path: str | Path) -> Config:
         ),
     )
 
+    hero_raw = data.get("hero_cards", [])
+    if not isinstance(hero_raw, list):
+        raise ConfigError("hero_cards: expected a list of [x, y] pairs")
+    hero_cards = [_point(pair, f"hero_cards[{i}]") for i, pair in enumerate(hero_raw)]
+
+    extra_raw = data.get("extra_troop_card")
+    extra_troop_card = None if extra_raw is None else _point(extra_raw, "extra_troop_card")
+
+    continue_point = _point(data.get("continue_point", [0.49, 0.78]), "continue_point")
+
+    army_raw = data.get("army", {})
+    if not isinstance(army_raw, dict):
+        raise ConfigError("army: expected an object of troop counts")
+    army = {key: _positive_int(value, f"army.{key}") for key, value in army_raw.items()}
+
     return Config(
         adb_path=_nonempty_str(_require(data, "adb_path"), "adb_path"),
         device_address=_nonempty_str(_require(data, "device_address"), "device_address"),
@@ -206,5 +225,9 @@ def load_config(path: str | Path) -> Config:
         loot_settle_s=_nonneg_number(_require(data, "loot_settle_s"), "loot_settle_s"),
         strategy_file=_nonempty_str(_require(data, "strategy_file"), "strategy_file"),
         card_points=card_points,
+        hero_cards=hero_cards,
+        extra_troop_card=extra_troop_card,
+        continue_point=continue_point,
+        army=army,
         wall_upgrade=wall_upgrade,
     )

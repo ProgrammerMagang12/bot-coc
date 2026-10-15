@@ -130,3 +130,34 @@ def test_invalid_min_elixir_rejected(tmp_path):
     p.write_text(json.dumps(data))
     with pytest.raises(ConfigError, match="min_elixir"):
         load_config(p)
+
+
+def test_example_config_deploy_and_event_fields():
+    cfg = load_config(EXAMPLE)
+    assert cfg.hero_cards == [[0.424, 0.91], [0.502, 0.91]]
+    assert cfg.extra_troop_card == [0.24, 0.933]
+    assert cfg.continue_point == [0.49, 0.78]
+    assert cfg.army == {
+        "dragon_drops": 13,
+        "balloon_drops": 16,
+        "wall_wrecker_drop": 1,
+        "extra_troop": 3,
+    }
+
+
+def test_invalid_hero_card_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["hero_cards"] = [[1.5, 0.5]]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="hero_cards"):
+        load_config(p)
+
+
+def test_invalid_army_count_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["army"]["extra_troop"] = 0
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="army.extra_troop"):
+        load_config(p)
