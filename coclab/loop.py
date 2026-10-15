@@ -253,11 +253,13 @@ class _Session:
         return False
 
     def _army_ready(self) -> bool:
-        """Validasi deck: kartu dragon & balloon wajib ada + jumlah dragon (badge).
+        """Validasi deck: tipe strict wajib terdeteksi + jumlah dragon (badge).
 
         Prioritas: deteksi template kartu (akurat lintas akun, tahan perbedaan
-        urutan/jumlah hero). Bila deteksi tidak konklusif, jatuh ke cek template
-        lama (dragon_card.png/balloon_card.png). Badge jumlah tetap dicek.
+        urutan/jumlah hero) lalu ``cards.verify_deck`` (tipe di ``deck_strict_types``;
+        tipe tanpa template/komposisi nol bersifat soft). Bila deteksi kosong-total,
+        jatuh ke cek template lama (dragon_card.png/balloon_card.png). Badge jumlah
+        dragon tetap dicek; jumlah lain hanya dicatat.
         """
         shot = self._capture("army_check.png")
         if shot is None:
@@ -275,21 +277,28 @@ class _Session:
                     logger.info("Deck scan gagal (%s); pakai cek template lama", exc)
                     detected = {}
         if detected:
-            has_dragon = "dragon" in detected
-            has_balloon = "balloon" in detected
-            if has_dragon and has_balloon:
+            tpl_dir = self.assets / "simplicity" / "deck"
+            available = cards.available_keys(tpl_dir) if tpl_dir.is_dir() else None
+            check = cards.verify_deck(
+                detected,
+                self.cfg.army,
+                list(self.cfg.deck_strict_types),
+                extra_template=self.cfg.extra_troop_template,
+                available=available,
+            )
+            if check.soft_missing:
                 logger.info(
-                    "Deck sesuai bot (deteksi: dragon %.2f, balloon %.2f)",
-                    detected["dragon"][2],
-                    detected["balloon"][2],
+                    "Deck check: soft (tak tersedia/tak diwajibkan): %s",
+                    check.soft_missing,
                 )
-            elif has_dragon or has_balloon:
+            if not check.ok:
                 logger.warning(
-                    "Deck tidak sesuai simpanan bot (deteksi: %s)", sorted(detected)
+                    "Deck TIDAK sesuai (tipe hilang: %s; terdeteksi: %s)",
+                    check.problems, sorted(detected),
                 )
                 return False
-            else:
-                detected = {}  # tidak konklusif; cek dengan template lama
+            logger.info("Deck check LOLOS (strict: %s)", check.notes.get("ok", []))
+            self._log_card_counts(img, detected)
         if not detected:
             for template in ("dragon_card.png", "balloon_card.png"):
                 path = self.assets / template
@@ -316,6 +325,20 @@ class _Session:
         if expected > 0:
             return value >= expected
         return value >= 2
+
+    def _log_card_counts(self, img, detected: dict) -> None:
+        """Catat jumlah pasukan/spell dari badge kartu (info saja, best-effort)."""
+        for key in ("balloon", self.cfg.extra_troop_template, "rage", "freeze"):
+            if not key or key not in detected:
+                continue
+            try:
+                cx, cy, _score = detected[key]
+                x1, y1, x2, y2 = cards.count_roi(cx, cy)
+                value = self.deps.read_badge(img[y1:y2, x1:x2])
+            except Exception as exc:  # noqa: BLE001 - info jumlah tak boleh mematikan gate
+                logger.info("Info jumlah %s: gagal dibaca (%s)", key, exc)
+                continue
+            logger.info("Info jumlah %s: %s", key, value)
 
     def _army_gate(self) -> StepResult:
         """Validasi deck begitu lawan tampil; mismatch → end battle + home."""

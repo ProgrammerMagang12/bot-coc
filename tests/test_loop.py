@@ -845,3 +845,30 @@ def test_attack_uses_detected_card_positions(monkeypatch):
     assert hit(1180, 815)  # rage
     assert hit(1301, 815)  # freeze
     assert hit(800, 450)  # titik drop strategi tetap dipakai
+
+
+def test_gate_strict_miss_ends_battle(monkeypatch):
+    """rage/freeze strict hilang dari deteksi → end battle + tidak serang."""
+    from coclab import loop as loop_mod
+    from coclab.vision import Match
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards",
+        lambda img, tpl_dir, **kw: {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9)},
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert (104, 675) in adb.taps  # end_battle_point (0.065, 0.75)
+    assert "ATTACK" not in states or states.count("ATTACK") == 0
+
+
+def test_gate_strict_pass_attacks(monkeypatch):
+    from coclab import loop as loop_mod
+    hits = {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9),
+            "rage": (1180, 815, 0.9), "freeze": (1301, 815, 0.9)}
+    monkeypatch.setattr(loop_mod.cards, "detect_cards", lambda img, tpl_dir, **kw: dict(hits))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert (104, 675) not in adb.taps
