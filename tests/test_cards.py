@@ -140,5 +140,6 @@ def test_verify_deck_template_missing_goes_soft():
 
 
 def test_count_roi_around_center():
+    # Offset dikalibrasi dari hcb3_menu.png: badge "x13" ada di kanan pusat match.
     x1, y1, x2, y2 = cards.count_roi(170, 815)
-    assert (x1, y1, x2, y2) == (128, 741, 212, 771)
+    assert (x1, y1, x2, y2) == (162, 741, 234, 771)

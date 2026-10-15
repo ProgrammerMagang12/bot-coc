@@ -141,8 +141,13 @@ def available_keys(templates_dir: str | Path) -> set[str]:
 
 
 def count_roi(cx: int, cy: int) -> tuple[int, int, int, int]:
-    """Kotak badge jumlah di sekitar pusat kartu: (x1, y1, x2, y2)."""
-    return (cx - 42, cy - 74, cx + 42, cy - 44)
+    """Kotak badge jumlah di atas kartu: (x1, y1, x2, y2).
+
+    Badge "xNN" bertengger di atas kartu, digeser ke kanan dari titik tengah
+    hasil ``matchTemplate`` (pusat match ada di kiri badge). Offset dikalibrasi
+    dari ``hcb3_menu.png`` (badge dragon "x13"); lihat tests/test_cards.py.
+    """
+    return (cx - 8, cy - 74, cx + 64, cy - 44)
 
 
 @dataclass
