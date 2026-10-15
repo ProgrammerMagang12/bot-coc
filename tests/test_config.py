@@ -138,7 +138,9 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.extra_troop_card == [0.24, 0.933]
     assert cfg.rage_card == [0.58, 0.933]
     assert cfg.freeze_card == [0.658, 0.933]
-    assert cfg.continue_point == [0.49, 0.78]
+    assert cfg.continue_point == [0.51, 0.90]
+    assert cfg.star_bonus_point == [0.495, 0.82]
+    assert cfg.notifications_not_now_point == [0.38, 0.68]
     assert cfg.army == {
         "dragon_drops": 13,
         "balloon_drops": 18,

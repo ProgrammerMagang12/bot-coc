@@ -30,7 +30,9 @@
   "extra_troop_card": [0.24, 0.933],
   "rage_card": [0.58, 0.933],
   "freeze_card": [0.658, 0.933],
-  "continue_point": [0.49, 0.78],
+  "continue_point": [0.51, 0.90],
+  "star_bonus_point": [0.495, 0.82],
+  "notifications_not_now_point": [0.38, 0.68],
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,

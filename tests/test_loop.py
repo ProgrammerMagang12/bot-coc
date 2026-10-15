@@ -359,8 +359,43 @@ def test_return_home_event_claim_flow():
     assert summary.ok
     assert (798, 770) in adb.taps  # tap Claim Reward di posisi hasil template match
     assert adb.taps.count((800, 450)) == 4  # buka chest: 4x tap layar
-    cont = (int(0.49 * 1600), int(0.78 * 900))
-    assert cont in adb.taps  # tap Continue sampai home
+
+
+def test_claim_event_reward_taps_continue_template():
+    from coclab.loop import _Session
+
+    states = []
+    script = full_script()
+    del script["attack.png"]  # home tidak pernah ketemu di test ini
+    script["continue.png"] = Match(True, 815, 812, 0.95)
+    deps, adb = make_deps(script, states)
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
+    result = session._claim_event_reward(Match(True, 798, 770, 0.97))
+    assert not result.ok
+    assert (798, 770) in adb.taps
+    assert adb.taps.count((800, 450)) == 4
+    assert (815, 812) in adb.taps  # Continue via template match
+
+
+def test_tap_until_home_taps_popup_points():
+    from coclab.loop import _Session
+
+    states = []
+    script = full_script()
+    del script["attack.png"]  # tidak pernah home di test ini
+    del script["returnhome.png"]
+    deps, adb = make_deps(script, states)
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
+    result = session._tap_until_home(max_rounds=2)
+    assert result is False
+    okay = (int(0.495 * 1600), int(0.82 * 900))
+    not_now = (int(0.38 * 1600), int(0.68 * 900))
+    assert okay in adb.taps  # tombol Okay Star Bonus
+    assert not_now in adb.taps  # tombol Not Now Notifications
 
 
 def test_wall_upgrade_wired_when_enabled(monkeypatch, tmp_path):

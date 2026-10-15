@@ -54,6 +54,8 @@ class Config:
     hero_cards: list[list[float]]
     extra_troop_card: list[float] | None
     continue_point: list[float]
+    star_bonus_point: list[float]
+    notifications_not_now_point: list[float]
     rage_card: list[float] | None
     freeze_card: list[float] | None
     army: dict[str, int]
@@ -196,7 +198,14 @@ def load_config(path: str | Path) -> Config:
     extra_raw = data.get("extra_troop_card")
     extra_troop_card = None if extra_raw is None else _point(extra_raw, "extra_troop_card")
 
-    continue_point = _point(data.get("continue_point", [0.49, 0.78]), "continue_point")
+    continue_point = _point(data.get("continue_point", [0.51, 0.90]), "continue_point")
+    star_bonus_point = _point(
+        data.get("star_bonus_point", [0.495, 0.82]), "star_bonus_point"
+    )
+    notifications_not_now_point = _point(
+        data.get("notifications_not_now_point", [0.38, 0.68]),
+        "notifications_not_now_point",
+    )
 
     rage_raw = data.get("rage_card")
     rage_card = None if rage_raw is None else _point(rage_raw, "rage_card")
@@ -235,6 +244,8 @@ def load_config(path: str | Path) -> Config:
         hero_cards=hero_cards,
         extra_troop_card=extra_troop_card,
         continue_point=continue_point,
+        star_bonus_point=star_bonus_point,
+        notifications_not_now_point=notifications_not_now_point,
         rage_card=rage_card,
         freeze_card=freeze_card,
         army=army,

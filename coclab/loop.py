@@ -354,27 +354,60 @@ class _Session:
         self.actions.tap_percent(*self.cfg.return_home_point)
         logger.info("Tap Return Home")
         self.deps.sleep(8)
-        return StepResult(True)
+        if self._tap_until_home():
+            return StepResult(True)
+        return StepResult(False, "not home after return")
 
     def _claim_event_reward(self, claim) -> StepResult:
-        """Event result screen: Claim Reward -> open chest (4 taps) -> Continue -> home."""
+        """Event result screen: Claim Reward -> open chest (4 taps) -> clear dialogs -> home."""
         self.actions.tap_px(claim.cx, claim.cy)
         logger.info("Tap Claim Reward (event chest)")
         self.deps.sleep(2)
         for _ in range(4):
             self.actions.tap_percent(0.5, 0.5)
             self.deps.sleep(1.2)
-        logger.info("Chest opened; tapping Continue until home")
-        for _ in range(3):
-            self.actions.tap_percent(*self.cfg.continue_point)
-            self.deps.sleep(3)
-            shot = self._capture("event_continue.png")
+        logger.info("Chest opened; clearing dialogs until home")
+        if self._tap_until_home():
+            logger.info("Back home after event claim")
+            return StepResult(True)
+        return StepResult(False, "event reward: continue failed")
+
+    def _tap_until_home(self, max_rounds: int = 8) -> bool:
+        """Tap known dialog buttons (Continue / Claim / Okay / Not Now) until home.
+
+        Blind points cover popups without templates yet: Star Bonus "Okay"
+        (star_bonus_point) and Notifications "Not Now" (notifications_not_now_point).
+        """
+        for _ in range(max_rounds):
+            shot = self._capture("until_home.png")
             if shot is None:
+                self.deps.sleep(2.5)
                 continue
             if self._match_safe(shot, "attack.png").found:
-                logger.info("Back home after event claim")
-                return StepResult(True)
-        return StepResult(False, "event reward: continue failed")
+                return True
+            if self._match_safe(shot, "continue.png").found:
+                match = self._match_safe(shot, "continue.png")
+                self.actions.tap_px(match.cx, match.cy)
+                logger.info("Tap Continue")
+            elif self._match_safe(shot, "claim_reward.png").found:
+                match = self._match_safe(shot, "claim_reward.png")
+                self.actions.tap_px(match.cx, match.cy)
+                logger.info("Tap Claim Reward")
+            elif self._match_safe(shot, "returnhome.png").found:
+                self.actions.tap_percent(*self.cfg.return_home_point)
+                logger.info("Tap Return Home")
+            else:
+                self.actions.tap_percent(*self.cfg.star_bonus_point)
+                logger.info("Tap popup Okay (star bonus point)")
+                self.deps.sleep(2.0)
+                shot2 = self._capture("until_home.png")
+                if shot2 is not None and self._match_safe(shot2, "attack.png").found:
+                    return True
+                self.actions.tap_percent(*self.cfg.notifications_not_now_point)
+                logger.info("Tap Not Now (notifications point)")
+            self.deps.sleep(2.5)
+        shot = self._capture("until_home.png")
+        return shot is not None and self._match_safe(shot, "attack.png").found
 
     def _run_wall_upgrade(self) -> None:
         """Optional wall upgrade after returning home; failures never break the cycle."""
