@@ -43,7 +43,7 @@ def test_loot_roi_must_be_ordered(tmp_path):
 def test_example_config_matches_spec_defaults():
     cfg = load_config(EXAMPLE)
     assert cfg.threshold == 0.69
-    assert cfg.end_delay_s == 20
+    assert cfg.end_delay_s == 150
     assert cfg.next_max_tries == 5
     assert cfg.search_timeout_s == 60
 

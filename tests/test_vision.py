@@ -91,6 +91,14 @@ def test_ocr_digits_tolerates_letter_noise_glued_to_group():
     assert ocr_digits(None, engine=lambda _i: "Y259 413") == 259413
 
 
+def test_ocr_digits_salvages_single_digit_noise_split():
+    assert ocr_digits(None, engine=lambda _i: "722 2 816") == 722816
+
+
+def test_ocr_digits_rejects_two_digit_middle_glitch():
+    assert ocr_digits(None, engine=lambda _i: "722 22 816") is None
+
+
 def test_ocr_digits_real_engine_is_lazy_when_unavailable(monkeypatch):
     from coclab import vision
 

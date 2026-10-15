@@ -11,7 +11,7 @@
   "drop_card_point": [0.091, 0.933],
   "drag_deploy_ms": 800,
   "tap_delay_ms": 150,
-  "end_delay_s": 20,
+  "end_delay_s": 150,
   "end_battle_point": [0.065, 0.75],
   "confirm_point": [0.614, 0.648],
   "return_home_point": [0.497, 0.849],

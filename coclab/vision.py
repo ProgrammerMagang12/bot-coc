@@ -139,6 +139,17 @@ def _looks_like_thousands_groups(tokens: list[str]) -> list[str] | None:
     return groups
 
 
+def _salvage_split_number(tokens: list[str]) -> list[str] | None:
+    """Recover '722 2 816' (3-digit + stray 1-digit + 3-digit) as ['722', '816']."""
+    groups = _digit_groups(tokens)
+    if groups is None or len(groups) != 3:
+        return None
+    first, mid, last = groups
+    if len(first) != 3 or len(mid) != 1 or len(last) != 3:
+        return None
+    return [first, last]
+
+
 def ocr_digits(
     img: np.ndarray | None, engine: Callable[[np.ndarray | None], str] | None = None
 ) -> int | None:
@@ -162,6 +173,10 @@ def ocr_digits(
         digits = "".join(ch for ch in numeric_tokens[0] if ch.isdigit())
     else:
         groups = _looks_like_thousands_groups(numeric_tokens)
+        if groups is None:
+            groups = _salvage_split_number(numeric_tokens)
+            if groups is not None:
+                logger.info("OCR: salvaged noisy split %r -> %s", text, "".join(groups))
         if groups is None:
             logger.info(
                 "OCR: expected exactly one numeric field, found %d (raw=%r)",
