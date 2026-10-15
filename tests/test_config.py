@@ -145,7 +145,7 @@ def test_example_config_deploy_and_event_fields():
     assert cfg.speed_up_taps == 2
     assert cfg.min_dark == 0
     assert cfg.loot_roi_dark == [0.050, 0.222, 0.183, 0.278]
-    assert cfg.reload_game_point == [0.244, 0.727]
+    assert cfg.reload_game_point == [0.309, 0.591]
     assert cfg.hero_skill_points == [[0.404, 0.76], [0.445, 0.76]]
     assert cfg.hero_skill_delays_s == [5, 10, 15, 20, 30, 45, 60]
     assert cfg.find_attack_timeout_s == 60

@@ -234,9 +234,11 @@ def load_config(path: str | Path) -> Config:
         data.get("loot_roi_dark", [0.050, 0.222, 0.183, 0.278]), "loot_roi_dark"
     )
     reload_game_point = _point(
-        data.get("reload_game_point", [0.244, 0.727]), "reload_game_point"
+        data.get("reload_game_point", [0.309, 0.591]), "reload_game_point"
     )
-    cluster_raw = data.get("reload_game_cluster", [[0.16, 0.52], [0.16, 0.60], [0.16, 0.68]])
+    cluster_raw = data.get(
+        "reload_game_cluster", [[0.28, 0.59], [0.31, 0.59], [0.34, 0.59]]
+    )
     if not isinstance(cluster_raw, list):
         raise ConfigError("reload_game_cluster: expected a list of [x, y] pairs")
     reload_game_cluster = [
