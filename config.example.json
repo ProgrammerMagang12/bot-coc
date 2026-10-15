@@ -50,7 +50,7 @@
   "coc_package": "com.supercell.clashofclans",
   "collect_points": [],
   "train_points": [],
-  "train_wait_s": 600,
+  "train_wait_s": 10,
   "army": {
     "dragon_drops": 13,
     "balloon_drops": 18,
