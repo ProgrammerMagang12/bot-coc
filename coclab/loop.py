@@ -274,6 +274,17 @@ class _Session:
             return value >= expected
         return value >= 2
 
+    def _army_gate(self) -> StepResult:
+        """Validasi deck begitu lawan tampil; mismatch → end battle + home."""
+        if self._army_ready():
+            return StepResult(True)
+        logger.warning("Pasukan tidak sesuai simpanan bot - end battle utk latih ulang")
+        self.actions.tap_percent(*self.cfg.end_battle_point)
+        self.deps.sleep(0.2)
+        self.actions.tap_percent(*self.cfg.confirm_point)
+        self.deps.sleep(2)
+        return StepResult(False, "army_mismatch")
+
     def _train_army(self) -> bool:
         """Klik urutan latih tersimpan (buka Army -> resep -> Train -> tutup) lalu tunggu."""
         if not self.cfg.train_points:
@@ -498,13 +509,6 @@ class _Session:
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
-        if not self._army_ready():
-            logger.warning("Pasukan tidak sesuai simpanan bot - end battle utk latih ulang")
-            self.actions.tap_percent(*self.cfg.end_battle_point)
-            self.deps.sleep(0.2)
-            self.actions.tap_percent(*self.cfg.confirm_point)
-            self.deps.sleep(2)
-            return StepResult(False, "army_mismatch")
         strategies: list = []
         try:
             strategies = self.deps.load_strategies(self.cfg.strategy_file)
@@ -721,6 +725,13 @@ class _Session:
             result = self.matchmaking()
             if not result.ok:
                 return result
+            gate = self._army_gate()
+            if not gate.ok:
+                if self.cfg.train_points and train_attempts < 1:
+                    if self._train_army():
+                        logger.info("Pasukan dilatih ulang - ulang siklus")
+                        return self.run_cycle(train_attempts + 1)
+                return gate
             result = self.evaluate_loot()
             if result.ok:
                 break
@@ -734,14 +745,6 @@ class _Session:
 
         result = self.attack()
         if not result.ok:
-            if (
-                result.reason == "army_mismatch"
-                and self.cfg.train_points
-                and train_attempts < 1
-            ):
-                if self._train_army():
-                    logger.info("Pasukan dilatih ulang - ulang siklus")
-                    return self.run_cycle(train_attempts + 1)
             return result
         result = self.return_home()
         if result.ok and self.cfg.wall_upgrade.enabled:
