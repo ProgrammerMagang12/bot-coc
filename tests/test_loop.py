@@ -210,9 +210,17 @@ def test_live_attack_taps_card_first_legacy():
     assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
 
 
-def test_multi_drop_attack_taps_cards_then_points():
+def test_multi_drop_attack_taps_cards_then_points(tmp_path):
+    import json
+
     from coclab.actions import Actions
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # urutan/titik persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -225,7 +233,7 @@ def test_multi_drop_attack_taps_cards_then_points():
             wall_wrecker_drop=[0.36, 0.66],
         )
     ]
-    cfg = load_config(EXAMPLE)
+    cfg = load_config(p)
     summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
     assert adb.swipes == []
@@ -327,7 +335,7 @@ def test_disconnect_popup_taps_reload():
     session = _Session(load_config(EXAMPLE), "observe", deps)
     session.device = "127.0.0.1:5555"
     session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
-    assert session._handle_disconnected(None) is True
+    assert session._handle_popups(None) is True
     assert (280, 407) in adb.taps
 
 def test_no_disconnect_returns_false():
@@ -339,8 +347,98 @@ def test_no_disconnect_returns_false():
     session = _Session(load_config(EXAMPLE), "observe", deps)
     session.device = "127.0.0.1:5555"
     session.actions = deps.actions_factory(deps.adb, session.device, "observe", (1600, 900))
-    assert session._handle_disconnected(None) is False
+    assert session._handle_popups(None) is False
     assert adb.taps == []
+
+
+def test_another_device_waits_during_battle_without_tap():
+    """Popup muncul SAAT battle-wait (setelah STATE ATTACK) → tidak tap, tunggu, lanjut."""
+    from coclab.vision import Match
+    script = full_script()
+    seen = {"n": 0}
+    states = []
+    deps, adb = make_deps(script, states)
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Another_device.png":
+            if "ATTACK" in states:          # hanya muncul saat battle-wait
+                seen["n"] += 1
+                return Match(seen["n"] <= 2, 500, 400, 0.99)
+            return Match(False, 0, 0, 0.0)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    sleeps = []
+    base_sleep = deps.sleep
+    deps.sleep = lambda s: sleeps.append(s) or base_sleep(s)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and seen["n"] >= 3
+    assert not any(abs(tx - 500) <= 3 and abs(ty - 400) <= 3 for tx, ty in adb.taps)
+    assert sleeps.count(1.0) >= 2  # menunggu dalam potongan 1 detik
+
+
+def test_another_device_stop_is_responsive():
+    from coclab.vision import Match
+    deps, adb = make_deps(full_script(), [])
+    base_ft = deps.find_template
+    state = {"stops": 0}
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Another_device.png":
+            return Match(True, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    deps.should_stop = lambda: state.__setitem__("stops", state["stops"] + 1) or state["stops"] > 2
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "stopped" in summary.reason.lower()
+
+
+def test_client_error_restarts_coc():
+    from coclab.vision import Match
+    script = full_script(**{"Client_error!.png": Match(True, 500, 400, 0.99)})
+    seen = {"n": 0}
+    deps, adb = make_deps(script, [])
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Client_error!.png":
+            seen["n"] += 1
+            return Match(seen["n"] <= 1, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert any("am start" in c for c in adb.shells)
+
+
+def test_connection_lost_taps_reconnect_point(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["connection_lost_point"] = [0.5, 0.55]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    from coclab.vision import Match
+    script = full_script(**{"Connection_lost.png": Match(True, 500, 400, 0.99)})
+    seen = {"n": 0}
+    deps, adb = make_deps(script, [])
+    base_ft = deps.find_template
+
+    def ft(img, tpl, threshold):
+        from pathlib import Path
+        if Path(tpl).name == "Connection_lost.png":
+            seen["n"] += 1
+            return Match(seen["n"] <= 1, 500, 400, 0.99)
+        return base_ft(img, tpl, threshold)
+
+    deps.find_template = ft
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and (800, 495) in adb.taps
 
 
 def test_find_attack_retries_until_button_appears():
@@ -411,6 +509,9 @@ def test_de_full_stops_and_closes_coc(tmp_path):
 
     data = json.loads(EXAMPLE.read_text())
     data["de_full_value"] = 100000
+    # Zoom-out (default on) menulis skrip pinch sebelum force-stop di jalur ini;
+    # dimatikan agar pin lama "shell pertama = force-stop" tetap utuh (fokus DE).
+    data["zoom_out_enabled"] = False
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     states = []
@@ -626,6 +727,8 @@ def test_army_counts_cycle_strategy_points(tmp_path):
 
     data = json.loads(EXAMPLE.read_text())
     data["army"] = {"dragon_drops": 5, "balloon_drops": 1, "wall_wrecker_drop": 1}
+    data["deploy_jitter_px"] = 0  # siklus titik persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     states = []
@@ -650,8 +753,16 @@ def test_army_counts_cycle_strategy_points(tmp_path):
     ]
 
 
-def test_heroes_deployed_at_scenario_positions():
+def test_heroes_deployed_at_scenario_positions(tmp_path):
+    import json
+
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # posisi hero persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -664,7 +775,7 @@ def test_heroes_deployed_at_scenario_positions():
             hero_positions=[[0.30, 0.40], [0.70, 0.60]],
         )
     ]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     hero1_card = (int(0.424 * 1600), int(0.91 * 900))
     hero2_card = (int(0.502 * 1600), int(0.91 * 900))
@@ -675,8 +786,16 @@ def test_heroes_deployed_at_scenario_positions():
     assert adb.taps.index(hero2_card) < adb.taps.index(pos2)
 
 
-def test_spells_cast_at_scenario_positions():
+def test_spells_cast_at_scenario_positions(tmp_path):
+    import json
+
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # posisi spell persis; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     states = []
     deps, adb = make_deps(full_script(), states)
@@ -690,7 +809,7 @@ def test_spells_cast_at_scenario_positions():
             freeze_spell_positions=[[0.60, 0.60]],
         )
     ]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     rage_card = (int(0.58 * 1600), int(0.933 * 900))
     freeze_card = (int(0.658 * 1600), int(0.933 * 900))
@@ -801,10 +920,18 @@ def test_wall_upgrade_not_called_when_disabled(monkeypatch):
     assert summary.ok and calls["n"] == 0
 
 
-def test_attack_uses_detected_card_positions(monkeypatch):
+def test_attack_uses_detected_card_positions(monkeypatch, tmp_path):
     """Kartu hasil deteksi template dipakai untuk deploy (bukan koordinat lama)."""
+    import json
+
     from coclab import loop as loop_mod
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0  # fokus presisi titik; jitter diuji terpisah
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     detected = {
         "dragon": (170, 815, 0.90),
@@ -831,7 +958,7 @@ def test_attack_uses_detected_card_positions(monkeypatch):
     )
     deps, adb = make_deps(full_script(), [])
     deps.load_strategies = lambda path: [strategy]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
 
     def hit(x, y):
@@ -845,3 +972,205 @@ def test_attack_uses_detected_card_positions(monkeypatch):
     assert hit(1180, 815)  # rage
     assert hit(1301, 815)  # freeze
     assert hit(800, 450)  # titik drop strategi tetap dipakai
+
+
+def test_gate_strict_miss_ends_battle(monkeypatch):
+    """rage/freeze strict hilang dari deteksi → end battle + tidak serang."""
+    from coclab import loop as loop_mod
+    from coclab.vision import Match
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards",
+        lambda img, tpl_dir, **kw: {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9)},
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert (104, 675) in adb.taps  # end_battle_point (0.065, 0.75)
+    assert "ATTACK" not in states or states.count("ATTACK") == 0
+
+
+def test_gate_strict_pass_attacks(monkeypatch):
+    from coclab import loop as loop_mod
+    hits = {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9),
+            "rage": (1180, 815, 0.9), "freeze": (1301, 815, 0.9)}
+    monkeypatch.setattr(loop_mod.cards, "detect_cards", lambda img, tpl_dir, **kw: dict(hits))
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert (104, 675) not in adb.taps
+
+
+def test_gate_verify_exception_falls_back(monkeypatch):
+    """verify_deck melempar exception → fallback template lama, loop tetap jalan."""
+    from coclab import loop as loop_mod
+
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards",
+        lambda img, tpl_dir, **kw: {"hero_bk": (803, 815, 0.9)},
+    )
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(loop_mod.cards, "verify_deck", boom)
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+
+
+def test_deck_unknown_strict_type_logs_warning(tmp_path, monkeypatch, caplog):
+    """Tipe strict tak dikenal tetap 'diabaikan' TAPI dicatat sebagai warning."""
+    import json
+    import logging
+
+    from coclab import loop as loop_mod
+
+    data = json.loads(EXAMPLE.read_text())
+    data["deck_strict_types"] = ["dragon", "balloon", "wall_wrecker"]
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    hits = {"dragon": (170, 815, 0.9), "balloon": (291, 815, 0.9)}
+    monkeypatch.setattr(
+        loop_mod.cards, "detect_cards", lambda img, tpl_dir, **kw: dict(hits)
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    with caplog.at_level(logging.WARNING, logger="coclab.loop"):
+        summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert any(
+        "tipe strict tak dikenal" in r.getMessage() for r in caplog.records
+    )
+    assert any("wall_wrecker" in r.getMessage() for r in caplog.records)
+
+
+def _run_with_strategy(monkeypatch, tmp_config=None, strategy=None, script=None):
+    from coclab.strategy import Strategy
+    st = strategy or Strategy(
+        name="t", dragon_drops=[[0.5, 0.5]], balloon_drops=[[0.55, 0.5]],
+        wall_wrecker_drop=[0.3, 0.55], hero_positions=[[0.6, 0.5]],
+        rage_spell_positions=[[0.7, 0.5]], freeze_spell_positions=[[0.8, 0.5]])
+    states = []
+    deps, adb = make_deps(script or full_script(), states)
+    deps.load_strategies = lambda path: [st]
+    cfg = load_config(tmp_config or EXAMPLE)
+    summary = run(cfg, "observe", 1, deps=deps)
+    return summary, adb, states
+
+
+def test_jitter_applied_to_map_drops(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["mirror_strategies"] = False  # fokus jitter; cermin diuji terpisah
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    summary, adb, _ = _run_with_strategy(None, tmp_config=p)
+    assert summary.ok
+    # dragon [0.5,0.5] → arah + (ke kanan) & ke atas: tx ∈ (800, 838], ty ∈ [423, 450)
+    assert any(800 < tx <= 840 and 421 <= ty < 450 for tx, ty in adb.taps)
+    # balloon [0.55,0.5] → arah − (ke tengah) & ke atas: tx ∈ [842, 880), ty ∈ [423, 450)
+    assert any(842 <= tx < 880 and 421 <= ty < 450 for tx, ty in adb.taps)
+
+
+def test_jitter_zero_taps_exact(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["deploy_jitter_px"] = 0
+    data["mirror_strategies"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    summary, adb, _ = _run_with_strategy(None, tmp_config=p)
+    assert summary.ok
+    assert (800, 450) in adb.taps      # dragon [0.5, 0.5] persis
+    assert (880, 450) in adb.taps      # balloon [0.55, 0.5] persis
+
+
+def test_zoom_out_before_attack_and_at_home():
+    from coclab import pinch
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    sh = f"sh {pinch.REMOTE_PATH}"
+    assert adb.shells.count(sh) >= 6  # 3x di find_attack (home) + 3x di attack()
+    assert any(pinch.REMOTE_PATH in c and "cat >" in c for c in adb.shells)
+    assert sum(1 for c in adb.shells if "cat >" in c) == 1  # skrip ditulis sekali (cache)
+
+
+def test_zoom_out_disabled(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["zoom_out_enabled"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok
+    assert not any("coclab_pinch_out.sh" in c for c in adb.shells)
+
+
+def test_zoom_out_failure_never_breaks_loop():
+    """Kegagalan pinch (mis. sendevent ditolak) ditelan: loop tetap jalan."""
+    deps, adb = make_deps(full_script(), [])
+    attempts = {"n": 0}
+
+    def shell_fn(cmd):
+        if "coclab_pinch_out.sh" in cmd:
+            attempts["n"] += 1
+            raise RuntimeError("sendevent ditolak")
+        return "com.supercell.clashofclans" if "ps" in cmd else ""
+
+    adb.shell_fn = shell_fn
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert attempts["n"] >= 2  # find_attack (home) + attack(): dua kegagalan, dua kali ditelan
+
+
+def test_zoom_out_rewrites_script_after_run_failure():
+    """Bila `sh` gagal (mis. skrip hilang pasca-reboot device), tulis ulang skrip."""
+    from coclab import pinch
+    from coclab.loop import _Session
+
+    deps, adb = make_deps(full_script(), [])
+    sh_cmd = f"sh {pinch.REMOTE_PATH}"
+    writes = {"n": 0}
+    runs = {"n": 0}
+
+    def shell_fn(cmd):
+        if cmd == sh_cmd:
+            runs["n"] += 1
+            if runs["n"] == 1:  # device reboot: skrip sudah tak ada
+                raise RuntimeError("sh: not found")
+        elif "cat >" in cmd and pinch.REMOTE_PATH in cmd:
+            writes["n"] += 1
+        return "com.supercell.clashofclans" if "ps" in cmd else ""
+
+    adb.shell_fn = shell_fn
+    session = _Session(load_config(EXAMPLE), "observe", deps)
+    session.device = "127.0.0.1:5555"
+    session.actions = deps.actions_factory(
+        deps.adb, session.device, "observe", (1600, 900)
+    )
+
+    session._zoom_out()
+    assert writes["n"] == 1
+    assert session._pinch_ready is False  # kegagalan mereset cache
+
+    session._zoom_out()
+    assert writes["n"] == 2  # skrip ditulis ulang, bukan no-op selamanya
+    assert session._pinch_ready is True
+
+
+def test_mirror_picks_mirrored_scenario(monkeypatch):
+    from coclab import loop as loop_mod
+    from coclab.strategy import Strategy
+    mirrored_dragon = [[0.1, 0.5]]
+    st = Strategy(name="m", dragon_drops=mirrored_dragon, balloon_drops=[],
+                  wall_wrecker_drop=None, hero_positions=[], rage_spell_positions=[],
+                  freeze_spell_positions=[])
+    monkeypatch.setattr(loop_mod.random, "choice", lambda seq: seq[-1])  # cermin di akhir
+    summary, adb, _ = _run_with_strategy(None, strategy=st)
+    assert summary.ok
+    # asli [0.1] → cermin [0.9]: tx ∈ [1440−38, 1440]
+    assert any(1402 <= tx <= 1441 and 421 <= ty <= 450 for tx, ty in adb.taps)

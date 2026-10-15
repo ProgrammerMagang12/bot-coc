@@ -43,8 +43,14 @@ class Adb:
         return out
 
     def shell(self, device: str, command: str) -> str:
-        """Run `adb -s <device> shell <command>` and return stdout text."""
-        out = self._run([self.adb_path, "-s", device, "shell", *command.split()])
+        """Run `adb -s <device> shell <command>` and return stdout text.
+
+        The command is passed verbatim as a single argv entry: adb forwards it
+        unchanged, so multi-line commands (heredocs that write device-side
+        scripts) keep their newlines and quoting. Splitting it into words would
+        collapse those newlines into spaces and break such commands.
+        """
+        out = self._run([self.adb_path, "-s", device, "shell", command])
         return out.decode("utf-8", "replace")
 
     def devices(self) -> list[str]:

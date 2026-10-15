@@ -92,3 +92,35 @@ def test_connect_fails_when_device_not_listed():
     r = FakeRunner([(0, b"cannot connect\n", ""), (0, b"List of devices attached\n", "")])
     with pytest.raises(AdbError, match="not online|not listed"):
         Adb("adb.exe", r).connect("127.0.0.1:5555")
+
+
+def test_shell_passes_command_verbatim_as_single_argv(monkeypatch):
+    """Perintah dikirim apa adanya sebagai SATU argv: newline & kutip utuh.
+
+    Regresi: memisah perintah jadi kata-kata (``command.split()``) mengubah
+    newline heredoc jadi spasi → tulis skrip pinch di device gagal diam-diam.
+    """
+    import coclab.adb as adb_mod
+
+    captured = {}
+
+    class Completed:
+        returncode = 0
+        stdout = b"ok"
+        stderr = b""
+
+    def fake_run(args, **kwargs):
+        captured["args"] = list(args)
+        captured["kwargs"] = kwargs
+        return Completed()
+
+    monkeypatch.setattr(adb_mod.subprocess, "run", fake_run)
+    command = "line1\nline2 'quoted' ; done"
+    out = Adb("adb.exe").shell("127.0.0.1:5555", command)
+    assert out == "ok"
+    assert captured["args"] == ["adb.exe", "-s", "127.0.0.1:5555", "shell", command]
+    assert len(captured["args"]) == 5  # satu argumen, bukan hasil split
+    assert captured["args"][-1] == command
+    assert captured["args"][-1].splitlines() == ["line1", "line2 'quoted' ; done"]
+    assert captured["kwargs"]["capture_output"] is True
+

@@ -9,13 +9,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from coclab import cards, digits, vision, wallupgrade
+from coclab import cards, digits, pinch, vision, wallupgrade
 from coclab.actions import Actions
 from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
 from coclab.config import Config
 from coclab.state import BotState, StepResult
-from coclab.strategy import load_strategies as load_strategies_default
+from coclab.strategy import (
+    jitter_point,
+    load_strategies as load_strategies_default,
+    mirror_strategy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +97,7 @@ class _Session:
         self.workdir: Path = Path(config.workdir)
         self._deck_cards: dict[str, tuple[int, int, float]] = {}
         self._size: tuple[int, int] = (0, 0)
+        self._pinch_ready = False
 
     # -- helpers ---------------------------------------------------------
 
@@ -123,7 +128,7 @@ class _Session:
             logger.info("Template %s unreadable (%s); skipped", template, exc)
             return vision.Match(False, 0, 0, 0.0)
 
-    def _handle_disconnected(self, shot: Path) -> bool:
+    def _handle_afk_reload(self, shot: Path) -> bool:
         """'Anyone there? RELOAD GAME' popup: tap RELOAD and wait for the game to return."""
         try:
             boxes = self.deps.ocr_boxes(self._img(shot))
@@ -151,6 +156,43 @@ class _Session:
             self.deps.sleep(25)
             return True
         return False
+
+    def _handle_popups(self, shot: Path) -> bool:
+        """Tangani popup lintas layar: AFK reload, Another_device, Client_error, Connection_lost."""
+        if self._handle_afk_reload(shot):
+            return True
+        if self._popup_match(shot, "simplicity/ui/Another_device.png"):
+            logger.warning(
+                "Another device: akun aktif di perangkat lain - menunggu %ds (tanpa tap)",
+                self.cfg.another_device_wait_s,
+            )
+            waited = 0
+            while waited < self.cfg.another_device_wait_s and not self.deps.should_stop():
+                step = min(1.0, self.cfg.another_device_wait_s - waited)
+                self.deps.sleep(step)
+                waited += step
+            return True
+        if self._popup_match(shot, "simplicity/ui/Client_error!.png"):
+            logger.warning("Client_error terdeteksi - restart CoC")
+            try:
+                self.deps.adb.shell(self.device, f"am force-stop {self.cfg.coc_package}")
+            except Exception as exc:  # noqa: BLE001
+                logger.info("force-stop gagal: %s", exc)
+            self._launch_coc()
+            return True
+        if self._popup_match(shot, "simplicity/ui/Connection_lost.png"):
+            point = self.cfg.connection_lost_point or [0.5, 0.5]
+            self.actions.tap_percent(*point)
+            logger.warning("Connection lost - tap reconnect di %s", point)
+            self.deps.sleep(10)
+            return True
+        return False
+
+    def _popup_match(self, shot: Path, template: str) -> bool:
+        try:
+            return self._match_safe(shot, template).found
+        except ValueError:
+            return False
 
     def _coc_running(self) -> bool:
         """True bila aplikasi CoC terlihat di daftar proses device."""
@@ -253,11 +295,13 @@ class _Session:
         return False
 
     def _army_ready(self) -> bool:
-        """Validasi deck: kartu dragon & balloon wajib ada + jumlah dragon (badge).
+        """Validasi deck: tipe strict wajib terdeteksi + jumlah dragon (badge).
 
         Prioritas: deteksi template kartu (akurat lintas akun, tahan perbedaan
-        urutan/jumlah hero). Bila deteksi tidak konklusif, jatuh ke cek template
-        lama (dragon_card.png/balloon_card.png). Badge jumlah tetap dicek.
+        urutan/jumlah hero) lalu ``cards.verify_deck`` (tipe di ``deck_strict_types``;
+        tipe tanpa template/komposisi nol bersifat soft). Bila deteksi kosong-total,
+        jatuh ke cek template lama (dragon_card.png/balloon_card.png). Badge jumlah
+        dragon tetap dicek; jumlah lain hanya dicatat.
         """
         shot = self._capture("army_check.png")
         if shot is None:
@@ -275,21 +319,38 @@ class _Session:
                     logger.info("Deck scan gagal (%s); pakai cek template lama", exc)
                     detected = {}
         if detected:
-            has_dragon = "dragon" in detected
-            has_balloon = "balloon" in detected
-            if has_dragon and has_balloon:
-                logger.info(
-                    "Deck sesuai bot (deteksi: dragon %.2f, balloon %.2f)",
-                    detected["dragon"][2],
-                    detected["balloon"][2],
+            tpl_dir = self.assets / "simplicity" / "deck"
+            try:
+                available = cards.available_keys(tpl_dir) if tpl_dir.is_dir() else None
+                check = cards.verify_deck(
+                    detected,
+                    self.cfg.army,
+                    list(self.cfg.deck_strict_types),
+                    extra_template=self.cfg.extra_troop_template,
+                    available=available,
                 )
-            elif has_dragon or has_balloon:
-                logger.warning(
-                    "Deck tidak sesuai simpanan bot (deteksi: %s)", sorted(detected)
-                )
-                return False
+            except Exception as exc:  # noqa: BLE001 - verifikasi tak boleh mematikan loop
+                logger.warning("Deck check gagal (%s); pakai cek template lama", exc)
+                detected = {}
             else:
-                detected = {}  # tidak konklusif; cek dengan template lama
+                if check.soft_missing:
+                    logger.info(
+                        "Deck check: soft (tak tersedia/tak diwajibkan): %s",
+                        check.soft_missing,
+                    )
+                if check.notes.get("ignored"):
+                    logger.warning(
+                        "Deck check: tipe strict tak dikenal diabaikan: %s",
+                        check.notes["ignored"],
+                    )
+                if not check.ok:
+                    logger.warning(
+                        "Deck TIDAK sesuai (tipe hilang: %s; terdeteksi: %s)",
+                        check.problems, sorted(detected),
+                    )
+                    return False
+                logger.info("Deck check LOLOS (strict: %s)", check.notes.get("ok", []))
+                self._log_card_counts(img, detected)
         if not detected:
             for template in ("dragon_card.png", "balloon_card.png"):
                 path = self.assets / template
@@ -316,6 +377,20 @@ class _Session:
         if expected > 0:
             return value >= expected
         return value >= 2
+
+    def _log_card_counts(self, img, detected: dict) -> None:
+        """Catat jumlah pasukan/spell dari badge kartu (info saja, best-effort)."""
+        for key in ("balloon", self.cfg.extra_troop_template, "rage", "freeze"):
+            if not key or key not in detected:
+                continue
+            try:
+                cx, cy, _score = detected[key]
+                x1, y1, x2, y2 = cards.count_roi(cx, cy)
+                value = self.deps.read_badge(img[y1:y2, x1:x2])
+            except Exception as exc:  # noqa: BLE001 - info jumlah tak boleh mematikan gate
+                logger.info("Info jumlah %s: gagal dibaca (%s)", key, exc)
+                continue
+            logger.info("Info jumlah %s: %s", key, value)
 
     def _army_gate(self) -> StepResult:
         """Validasi deck begitu lawan tampil; mismatch → end battle + home."""
@@ -521,11 +596,12 @@ class _Session:
             shot = self._capture("screen.png")
             if shot is None:
                 return StepResult(False, "attack screen capture failed")
-            if self._handle_disconnected(shot):
+            if self._handle_popups(shot):
                 continue
             match = self._match(shot, "attack.png")
             if match.found:
                 logger.info("Attack button found (score %.2f)", match.score)
+                self._zoom_out()
                 return StepResult(True, data={"px": match.cx, "py": match.cy})
             if (
                 self._match_safe(shot, "returnhome.png").found
@@ -556,7 +632,7 @@ class _Session:
             shot = self._capture("matchmaking.png")
             if shot is None:
                 return StepResult(False, "matchmaking capture failed")
-            if self._handle_disconnected(shot):
+            if self._handle_popups(shot):
                 continue
             if not clicked:
                 match = self._match(shot, "find_match.png")
@@ -657,6 +733,33 @@ class _Session:
             self.deps.sleep(2)
         return StepResult(False, "next button not found")
 
+    # -- zoom ------------------------------------------------------------
+
+    def _zoom_out(self) -> None:
+        """Normalisasi kamera ke zoom-out maksimum (pinch sendevent).
+
+        Skrip ditulis sekali ke device (cache ``_pinch_ready``) lalu dijalankan
+        ``zoom_out_pinches`` kali. Idempoten: bila kamera sudah max zoom-out
+        tidak ada perubahan. Kegagalan apa pun tidak boleh memblokir loop.
+        """
+        try:
+            if not self.cfg.zoom_out_enabled or self.cfg.zoom_out_pinches <= 0:
+                return
+            if not self._pinch_ready:
+                self.deps.adb.shell(self.device, pinch.write_script_cmd())
+                self._pinch_ready = True
+            for _ in range(self.cfg.zoom_out_pinches):
+                self.deps.adb.shell(self.device, f"sh {pinch.REMOTE_PATH}")
+            self.deps.sleep(self.cfg.zoom_out_settle_s)
+            logger.info(
+                "Zoom-out kamera: %d pinch (settle %.1fs)",
+                self.cfg.zoom_out_pinches,
+                self.cfg.zoom_out_settle_s,
+            )
+        except Exception as exc:  # noqa: BLE001 - zoom opsional, loop wajib lanjut
+            self._pinch_ready = False  # device bisa reboot: paksa tulis ulang skrip
+            logger.warning("Zoom-out gagal (lanjut): %s", exc)
+
     _DETECT_KEYS: dict[str, str] = {
         "dragon": "dragon",
         "balloon": "balloon",
@@ -717,6 +820,21 @@ class _Session:
                 best_score = hit[2]
         return self._detected_point(best_key)
 
+    def _jittered(self, xp, yp):
+        width, height = self._size
+        if self.cfg.deploy_jitter_px <= 0 or width <= 0 or height <= 0:
+            return [xp, yp]
+        jx = self.cfg.deploy_jitter_px / width
+        jy = self.cfg.deploy_jitter_px * 0.7 / height
+        return jitter_point(xp, yp, jx, jy)
+
+    def _deploy_delay(self):
+        delay = self.cfg.tap_delay_ms / 1000
+        pct = self.cfg.tap_delay_jitter_pct / 100
+        if pct > 0:
+            delay *= random.uniform(1 - pct, 1 + pct)
+        return delay
+
     def _drop_group(
         self,
         card_key: str,
@@ -749,8 +867,8 @@ class _Session:
         taps = len(points) if count is None else max(count, 0)
         for i in range(taps):
             xp, yp = points[i % len(points)]
-            self.actions.tap_percent(xp, yp)
-            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+            self.actions.tap_percent(*self._jittered(xp, yp))
+            self.deps.sleep(self._deploy_delay())
 
     def _drop_heroes(self, chosen) -> None:
         if not chosen.hero_positions:
@@ -769,11 +887,12 @@ class _Session:
             self.actions.tap_percent(*card)
             logger.info("Deploy hero %d", i + 1)
             self.deps.sleep(0.4)
-            self.actions.tap_percent(xp, yp)
-            self.deps.sleep(self.cfg.tap_delay_ms / 1000)
+            self.actions.tap_percent(*self._jittered(xp, yp))
+            self.deps.sleep(self._deploy_delay())
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
+        self._zoom_out()
         self._scan_deck()
         strategies: list = []
         try:
@@ -782,6 +901,8 @@ class _Session:
             logger.warning("Strategy load failed (%s); using legacy single drop", exc)
 
         if strategies:
+            if self.cfg.mirror_strategies:
+                strategies = strategies + [mirror_strategy(s) for s in strategies]
             chosen = random.choice(strategies)
             logger.info("Executing Scenario: %s", chosen.name)
             army = self.cfg.army
@@ -848,7 +969,7 @@ class _Session:
                     return StepResult(False, "coc_restarted")
                 shot = self._capture("battle_end.png")
                 if shot is not None:
-                    if self._handle_disconnected(shot):
+                    if self._handle_popups(shot):
                         continue
                     if (
                         self._match_safe(shot, "returnhome.png").found
@@ -934,7 +1055,7 @@ class _Session:
                 self.actions.tap_percent(*self.cfg.return_home_point)
                 logger.info("Tap Return Home")
             else:
-                if self._handle_disconnected(shot):
+                if self._handle_popups(shot):
                     continue
                 self.actions.tap_percent(*self.cfg.star_bonus_point)
                 logger.info("Tap popup Okay (star bonus point)")

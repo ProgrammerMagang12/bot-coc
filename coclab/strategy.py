@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -98,3 +99,36 @@ def load_strategies(path: str | Path) -> list[Strategy]:
             )
         )
     return strategies
+
+
+def jitter_point(
+    xp: float, yp: float, jitter_x: float, jitter_y: float, rng: Any = None
+) -> list[float]:
+    """Geser titik peta ala Simplicity: horizontal ke arah tengah, vertikal ke atas."""
+    r = rng or random
+    direction = 1.0 if xp <= 0.5 else -1.0
+    x2 = xp + direction * r.uniform(0, jitter_x)
+    y2 = yp - r.uniform(0, jitter_y)
+    return [min(0.98, max(0.02, x2)), min(0.80, max(0.03, y2))]
+
+
+def _mirror_points(points: list[list[float]]) -> list[list[float]]:
+    """list[[x, y]] -> list[[1-x, y]]."""
+    return [[1.0 - x, y] for x, y in points]
+
+
+def mirror_strategy(strategy: Strategy) -> Strategy:
+    """Salinan cermin kiri↔kanan (x -> 1-x) dari sebuah Strategy."""
+    return Strategy(
+        name=strategy.name,
+        dragon_drops=_mirror_points(strategy.dragon_drops),
+        balloon_drops=_mirror_points(strategy.balloon_drops),
+        wall_wrecker_drop=(
+            None
+            if strategy.wall_wrecker_drop is None
+            else [1.0 - strategy.wall_wrecker_drop[0], strategy.wall_wrecker_drop[1]]
+        ),
+        hero_positions=_mirror_points(strategy.hero_positions),
+        rage_spell_positions=_mirror_points(strategy.rage_spell_positions),
+        freeze_spell_positions=_mirror_points(strategy.freeze_spell_positions),
+    )
