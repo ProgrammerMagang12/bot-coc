@@ -371,11 +371,21 @@ def test_find_attack_launches_coc_when_closed():
     script = full_script()
     script["attack.png"] = Match(False, 0, 0, 0.1)
     deps, adb = make_deps(script, states)
-    adb.shell_fn = lambda cmd: "" if "ps" in cmd else "ok"
+
+    def shell_fn(cmd):
+        if "ps -A" in cmd:
+            return ""
+        if "resolve-activity" in cmd:
+            return "priority=0 x\ncom.supercell.clashofclans/com.supercell.titan.GameApp"
+        if "am start" in cmd:
+            return "Starting: Intent { cmp=com.supercell.clashofclans/com.supercell.titan.GameApp }"
+        return "ok"
+
+    adb.shell_fn = shell_fn
     orig = deps.find_template
 
     def launched():
-        return any("monkey" in c for c in adb.shells)
+        return any("am start" in c for c in adb.shells)
 
     def find_template(img, tpl, threshold):
         name = Path(tpl).name
@@ -388,7 +398,7 @@ def test_find_attack_launches_coc_when_closed():
     deps.find_template = find_template
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert summary.ok
-    assert any("monkey" in c for c in adb.shells)
+    assert any("am start" in c for c in adb.shells)
 
 
 def test_de_full_stops_and_closes_coc(tmp_path):

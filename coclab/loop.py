@@ -159,17 +159,46 @@ class _Session:
             return True
         return self.cfg.coc_package in out
 
+    def _resolve_coc_component(self) -> str | None:
+        """Cari komponen launcher CoC via `cmd package resolve-activity`."""
+        try:
+            out = self.deps.adb.shell(
+                self.device,
+                "cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "
+                + self.cfg.coc_package,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.info("resolve-activity gagal (%s)", exc)
+            return None
+        for line in reversed((out or "").splitlines()):
+            line = line.strip()
+            if line.startswith(self.cfg.coc_package) and "/" in line:
+                return line
+        return None
+
     def _launch_coc(self) -> None:
         """CoC close/DC: buka aplikasinya lalu tunggu loading."""
         logger.warning("CoC tidak jalan — membuka aplikasi CoC...")
+        opened = False
+        component = self._resolve_coc_component()
+        if component is None:
+            component = f"{self.cfg.coc_package}/com.supercell.titan.GameApp"
         try:
-            self.deps.adb.shell(
-                self.device,
-                f"monkey -p {self.cfg.coc_package} -c android.intent.category.LAUNCHER 1",
-            )
-            logger.info("Perintah buka CoC terkirim; tunggu loading")
+            out = self.deps.adb.shell(self.device, f"am start -n {component}")
+            opened = "starting" in (out or "").lower()
+            if opened:
+                logger.info("CoC dibuka via am start (%s)", component)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Gagal membuka CoC: %s", exc)
+            logger.warning("am start gagal: %s", exc)
+        if not opened:
+            try:
+                self.deps.adb.shell(
+                    self.device,
+                    f"monkey -p {self.cfg.coc_package} -c android.intent.category.LAUNCHER 1",
+                )
+                logger.info("CoC dibuka via monkey")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("monkey gagal juga: %s", exc)
         self.deps.sleep(30)
 
     def _home_de(self) -> int | None:
