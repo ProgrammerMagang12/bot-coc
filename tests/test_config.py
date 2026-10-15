@@ -230,12 +230,35 @@ def test_defaults_when_absent(tmp_path):
     import json
     data = json.loads(EXAMPLE.read_text())
     for key in ("deck_strict_types", "deploy_jitter_px", "mirror_strategies",
-                "tap_delay_jitter_pct", "another_device_wait_s", "connection_lost_point"):
+                "tap_delay_jitter_pct", "another_device_wait_s", "connection_lost_point",
+                "zoom_out_enabled", "zoom_out_pinches", "zoom_out_settle_s"):
         data.pop(key, None)
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     cfg = load_config(p)
     assert cfg.deploy_jitter_px == 38 and cfg.mirror_strategies is True
+    # default zoom ada di kode (bukan hanya di config.example.json):
+    assert cfg.zoom_out_enabled is True
+    assert cfg.zoom_out_pinches == 3
+    assert cfg.zoom_out_settle_s == 0.8
+
+
+def test_example_config_zoom_defaults():
+    cfg = load_config(EXAMPLE)
+    assert cfg.zoom_out_enabled is True
+    assert cfg.zoom_out_pinches == 3
+    assert cfg.zoom_out_settle_s == 0.8
+
+
+def test_invalid_zoom_fields_rejected(tmp_path):
+    base = json.loads(EXAMPLE.read_text())
+    for key, bad in (("zoom_out_pinches", 11), ("zoom_out_settle_s", -1)):
+        data = json.loads(json.dumps(base))
+        data[key] = bad
+        p = tmp_path / "c.json"
+        p.write_text(json.dumps(data))
+        with pytest.raises(ConfigError, match=key):
+            load_config(p)
 
 
 def test_invalid_reliability_fields_rejected(tmp_path):

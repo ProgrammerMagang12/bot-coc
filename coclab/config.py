@@ -87,6 +87,9 @@ class Config:
     tap_delay_jitter_pct: int
     another_device_wait_s: int
     connection_lost_point: list[float] | None
+    zoom_out_enabled: bool
+    zoom_out_pinches: int
+    zoom_out_settle_s: float
     army: dict[str, int]
     wall_upgrade: WallUpgradeConfig
 
@@ -359,6 +362,19 @@ def load_config(path: str | Path) -> Config:
     lost_raw = data.get("connection_lost_point")
     connection_lost_point = None if lost_raw is None else _point(lost_raw, "connection_lost_point")
 
+    zoom_out_enabled = _bool(data.get("zoom_out_enabled", True), "zoom_out_enabled")
+    pinches_raw = data.get("zoom_out_pinches", 3)
+    if (
+        not isinstance(pinches_raw, int)
+        or isinstance(pinches_raw, bool)
+        or not 0 <= pinches_raw <= 10
+    ):
+        raise ConfigError("zoom_out_pinches: expected an integer between 0 and 10")
+    zoom_out_pinches = int(pinches_raw)
+    zoom_out_settle_s = _nonneg_number(
+        data.get("zoom_out_settle_s", 0.8), "zoom_out_settle_s"
+    )
+
     army_raw = data.get("army", {})
     if not isinstance(army_raw, dict):
         raise ConfigError("army: expected an object of troop counts")
@@ -424,6 +440,9 @@ def load_config(path: str | Path) -> Config:
         tap_delay_jitter_pct=tap_delay_jitter_pct,
         another_device_wait_s=another_device_wait_s,
         connection_lost_point=connection_lost_point,
+        zoom_out_enabled=zoom_out_enabled,
+        zoom_out_pinches=zoom_out_pinches,
+        zoom_out_settle_s=zoom_out_settle_s,
         army=army,
         wall_upgrade=wall_upgrade,
     )

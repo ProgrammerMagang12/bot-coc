@@ -509,6 +509,9 @@ def test_de_full_stops_and_closes_coc(tmp_path):
 
     data = json.loads(EXAMPLE.read_text())
     data["de_full_value"] = 100000
+    # Zoom-out (default on) menulis skrip pinch sebelum force-stop di jalur ini;
+    # dimatikan agar pin lama "shell pertama = force-stop" tetap utuh (fokus DE).
+    data["zoom_out_enabled"] = False
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     states = []
@@ -1056,6 +1059,46 @@ def test_jitter_zero_taps_exact(tmp_path):
     assert summary.ok
     assert (800, 450) in adb.taps      # dragon [0.5, 0.5] persis
     assert (880, 450) in adb.taps      # balloon [0.55, 0.5] persis
+
+
+def test_zoom_out_before_attack_and_at_home():
+    from coclab import pinch
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    sh = f"sh {pinch.REMOTE_PATH}"
+    assert adb.shells.count(sh) >= 6  # 3x di find_attack (home) + 3x di attack()
+    assert any(pinch.REMOTE_PATH in c and "cat >" in c for c in adb.shells)
+    assert sum(1 for c in adb.shells if "cat >" in c) == 1  # skrip ditulis sekali (cache)
+
+
+def test_zoom_out_disabled(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["zoom_out_enabled"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok
+    assert not any("coclab_pinch_out.sh" in c for c in adb.shells)
+
+
+def test_zoom_out_failure_never_breaks_loop():
+    """Kegagalan pinch (mis. sendevent ditolak) ditelan: loop tetap jalan."""
+    deps, adb = make_deps(full_script(), [])
+    attempts = {"n": 0}
+
+    def shell_fn(cmd):
+        if "coclab_pinch_out.sh" in cmd:
+            attempts["n"] += 1
+            raise RuntimeError("sendevent ditolak")
+        return "com.supercell.clashofclans" if "ps" in cmd else ""
+
+    adb.shell_fn = shell_fn
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    assert attempts["n"] >= 2  # find_attack (home) + attack(): dua kegagalan, dua kali ditelan
 
 
 def test_mirror_picks_mirrored_scenario(monkeypatch):

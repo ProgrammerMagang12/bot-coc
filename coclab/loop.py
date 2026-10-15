@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from coclab import cards, digits, vision, wallupgrade
+from coclab import cards, digits, pinch, vision, wallupgrade
 from coclab.actions import Actions
 from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
@@ -97,6 +97,7 @@ class _Session:
         self.workdir: Path = Path(config.workdir)
         self._deck_cards: dict[str, tuple[int, int, float]] = {}
         self._size: tuple[int, int] = (0, 0)
+        self._pinch_ready = False
 
     # -- helpers ---------------------------------------------------------
 
@@ -595,6 +596,7 @@ class _Session:
             match = self._match(shot, "attack.png")
             if match.found:
                 logger.info("Attack button found (score %.2f)", match.score)
+                self._zoom_out()
                 return StepResult(True, data={"px": match.cx, "py": match.cy})
             if (
                 self._match_safe(shot, "returnhome.png").found
@@ -725,6 +727,32 @@ class _Session:
                     return StepResult(True)
             self.deps.sleep(2)
         return StepResult(False, "next button not found")
+
+    # -- zoom ------------------------------------------------------------
+
+    def _zoom_out(self) -> None:
+        """Normalisasi kamera ke zoom-out maksimum (pinch sendevent).
+
+        Skrip ditulis sekali ke device (cache ``_pinch_ready``) lalu dijalankan
+        ``zoom_out_pinches`` kali. Idempoten: bila kamera sudah max zoom-out
+        tidak ada perubahan. Kegagalan apa pun tidak boleh memblokir loop.
+        """
+        try:
+            if not self.cfg.zoom_out_enabled or self.cfg.zoom_out_pinches <= 0:
+                return
+            if not self._pinch_ready:
+                self.deps.adb.shell(self.device, pinch.write_script_cmd())
+                self._pinch_ready = True
+            for _ in range(self.cfg.zoom_out_pinches):
+                self.deps.adb.shell(self.device, f"sh {pinch.REMOTE_PATH}")
+            self.deps.sleep(self.cfg.zoom_out_settle_s)
+            logger.info(
+                "Zoom-out kamera: %d pinch (settle %.1fs)",
+                self.cfg.zoom_out_pinches,
+                self.cfg.zoom_out_settle_s,
+            )
+        except Exception as exc:  # noqa: BLE001 - zoom opsional, loop wajib lanjut
+            logger.warning("Zoom-out gagal (lanjut): %s", exc)
 
     _DETECT_KEYS: dict[str, str] = {
         "dragon": "dragon",
@@ -858,6 +886,7 @@ class _Session:
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)
+        self._zoom_out()
         self._scan_deck()
         strategies: list = []
         try:
