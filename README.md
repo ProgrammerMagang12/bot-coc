@@ -38,6 +38,8 @@ Prototipe otomasi **original** (kode ditulis sendiri dari nol) untuk satu siklus
 - **Observe default**; `--live` wajib eksplisit. Ctrl+C = stop bersih (exit code 130).
 - OCR loot memakai `rapidocr-onnxruntime` bila terpasang; jika tidak ada → kebijakan `on_ocr_fail`
   (default `stop` = berhenti, aman).
+- Deploy pasukan memakai **drag** dari kartu (bar kiri-bawah) ke titik drop — tap-tap seleksi tidak mempan di UI ini.
+  Durasi drag diatur `drag_deploy_ms` (default 800; drag = deploy massal sepanjang jalur, sesuaikan untuk kontrol jumlah).
 - v2: serangan **multi-drop** dari `AttackStrategies.json` (buat dengan `py tools/make_strategy.py --image <scout.png> --name <nama>`); **wall upgrade** opsional via `wall_upgrade.enabled`
   (default `false`; wajib kalibrasi `logo_up.png` + titik-titik dulu). Heroes/spells/skills = v2.2; zoom-out masih manual sebelum `--live`.
 - Disclaimer lengkap ada di `docs/superpowers/specs/2026-10-15-coc-lab-v1-design.md`.
