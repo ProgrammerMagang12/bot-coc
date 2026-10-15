@@ -739,7 +739,89 @@ Expected log: `Deck check LOLOS (strict: [...])`, tap berada dalam jitter, battl
 
 ---
 
-### Task 8: Merge, rebuild EXE, verifikasi dist
+### Task 8: Zoom-out normalization (pinch sendevent sebelum attack + di home)
+
+**Files:**
+- Create: `coclab/pinch.py`
+- Modify: `coclab/loop.py` (`attack()`, `find_attack()`, `_Session.__init__`), `coclab/config.py`, `config.example.json`
+- Test: `tests/test_pinch.py` (baru), `tests/test_loop.py`, `tests/test_config.py`
+
+**Interfaces:**
+- `coclab/pinch.py` (murni, tanpa I/O):
+  - `TOUCH_DEVICE = "/dev/input/event4"` (touchscreen LDPlayer: ABS_MT 1:1 dengan 1600x900 — terverifikasi spike), `REMOTE_PATH = "/data/local/tmp/coclab_pinch_out.sh"`.
+  - `build_pinch_out_script(width=1600, height=900, steps=5, device=TOUCH_DEVICE) -> str` — skrip shell sendevent pinch-close 2 jari vertikal: jari0 `(cx, cy-150) → (cx, cy-40)`, jari1 `(cx, cy+150) → (cx, cy+40)`; kode: EV_ABS=3 / EV_KEY=1 / EV_SYN=0; ABS_MT_SLOT=47, ABS_MT_TRACKING_ID=57, ABS_MT_POSITION_X=53, ABS_MT_POSITION_Y=54, BTN_TOUCH=330, SYN_REPORT=0; `sleep 0.06` antar langkah; diakhiri TRACKING_ID -1 (kedua slot) + BTN_TOUCH 0 + SYN.
+  - `write_script_cmd(path=REMOTE_PATH, script=None) -> str` — perintah satu-baris via adb shell: `cat > PATH << 'COCLAB_EOF'` + skrip + `COCLAB_EOF` + `chmod 755 PATH` (heredoc; aman karena skrip tanpa kutip tunggal).
+- `coclab/config.py` fields baru: `zoom_out_enabled: bool` (default True), `zoom_out_pinches: int` (default 3, valid 0..10), `zoom_out_settle_s: float` (default 0.8, nonneg).
+- `_Session`: flag `self._pinch_ready = False`; method `_zoom_out()` — bila enabled & pinches>0: tulis skrip sekali (cache `_pinch_ready`) → `adb.shell(f"sh {REMOTE_PATH}")` x pinches → `sleep(zoom_out_settle_s)` → log; SEMUA exception ditelan + `logger.warning("Zoom-out gagal (lanjut): %s", exc)`.
+- Hook 1: `attack()` — setelah `self._state(BotState.ATTACK)`, SEBELUM `self._scan_deck()` → `self._zoom_out()`.
+- Hook 2: `find_attack()` — di dalam blok `if match.found:` sebelum `return StepResult(True, ...)` → `self._zoom_out()` (home).
+- `config.example.json`: 3 key baru (`true`, `3`, `0.8`).
+
+- [ ] **Step 1: Write the failing tests** — `tests/test_pinch.py`:
+
+```python
+from coclab import pinch
+
+
+def test_script_has_two_fingers_and_converging_moves():
+    s = pinch.build_pinch_out_script()
+    assert f"sendevent {pinch.TOUCH_DEVICE} 3 47 0" in s   # slot 0 turun
+    assert f"sendevent {pinch.TOUCH_DEVICE} 3 47 1" in s   # slot 1 turun
+    assert " 410" in s and " 490" in s                     # posisi akhir jari (saling mendekat)
+    assert s.count(" 330 1") == 1 and s.count(" 330 0") == 1  # BTN_TOUCH down/up
+
+
+def test_script_downs_ups_and_syn():
+    s = pinch.build_pinch_out_script(steps=3)
+    assert f"sendevent {pinch.TOUCH_DEVICE} 0 0 0" in s          # SYN_REPORT
+    assert f"sendevent {pinch.TOUCH_DEVICE} 3 57 -1" in s        # tracking up
+    assert s.startswith("sendevent")
+
+
+def test_write_cmd_heredoc():
+    cmd = pinch.write_script_cmd()
+    assert cmd.startswith("cat > /data/local/tmp/coclab_pinch_out.sh << 'COCLAB_EOF'")
+    assert "chmod 755 /data/local/tmp/coclab_pinch_out.sh" in cmd
+```
+
+dan `tests/test_loop.py`:
+
+```python
+def test_zoom_out_before_attack_and_at_home():
+    from coclab import pinch
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    sh = f"sh {pinch.REMOTE_PATH}"
+    assert adb.shells.count(sh) >= 6  # 3x di find_attack (home) + 3x di attack()
+    assert any(pinch.REMOTE_PATH in c and "cat >" in c for c in adb.shells)
+
+
+def test_zoom_out_disabled(tmp_path):
+    import json
+    data = json.loads(EXAMPLE.read_text())
+    data["zoom_out_enabled"] = False
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    deps, adb = make_deps(full_script(), [])
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok
+    assert not any("coclab_pinch_out.sh" in c for c in adb.shells)
+```
+
+dan `tests/test_config.py`: defaults (`True`, `3`, `0.8`) + tolak `zoom_out_pinches` 11 / `zoom_out_settle_s` -1.
+
+- [ ] **Step 2: Run to verify RED** — `py -m pytest tests/test_pinch.py tests/test_loop.py -q -p no:cacheprovider -k "pinch or zoom"` → FAIL (modul belum ada).
+
+- [ ] **Step 3: Implement** `coclab/pinch.py` + config fields + kedua hook loop (sesuai Interfaces).
+
+- [ ] **Step 4: Run full suite** — `py -m pytest -q -p no:cacheprovider` → 178 + ~7 baru hijau.
+
+- [ ] **Step 5: Commit** — `git add coclab/pinch.py coclab/loop.py coclab/config.py config.example.json tests/ && git commit -m "feat: zoom-out normalization via sendevent pinch (before attack and at home)"`
+
+---
+
+### Task 9: Merge, rebuild EXE, verifikasi dist
 
 **Files:**
 - Modify (di main repo): `dist/GARUDA/config.json`, `dist/GARUDA/profiles/*.json` (tambahan key baru — defaults cukup, tapi ditulis eksplisit)
@@ -807,4 +889,4 @@ Verifikasi akhir: `dist\GARUDA\assets\simplicity\ui\Another_device.png` ada, `GA
 - Gunakan TDD persis: tes gagal → implement → hijau → commit per task.
 - Setelah semua task: jalankan `py -m pytest -q -p no:cacheprovider` penuh (harus 153 + ±20 tes baru hijau).
 - Loop test memakai `tests/fakes.py` yang sudah ada; monkeypatch atribut module (`loop_mod.cards.detect_cards`, `loop_mod.random.choice`, `deps.find_template`) — pola sudah terbukti di `test_attack_uses_detected_card_positions`.
-- Jangan menyentuh `dist/` dari worktree — rebuild & update dist dilakukan di main repo (Task 8).
+- Jangan menyentuh `dist/` dari worktree — rebuild & update dist dilakukan di main repo (Task 9).
