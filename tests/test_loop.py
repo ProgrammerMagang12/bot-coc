@@ -127,7 +127,7 @@ def test_return_home_skips_missing_event_template():
     assert summary.ok
 
 
-def test_live_attack_drags_card_first_legacy():
+def test_live_attack_taps_card_first_legacy():
     from coclab.actions import Actions
 
     deps, adb = make_deps(full_script(), [])
@@ -138,10 +138,11 @@ def test_live_attack_drags_card_first_legacy():
     assert summary.ok
     card = (int(0.091 * 1600), int(0.933 * 900))
     drop = (int(0.35 * 1600), int(0.72 * 900))
-    assert adb.swipes == [(card[0], card[1], drop[0], drop[1], cfg.drag_deploy_ms)]
+    assert adb.swipes == []
+    assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
 
 
-def test_multi_drop_attack_drags_first_then_taps_rest():
+def test_multi_drop_attack_taps_cards_then_points():
     from coclab.actions import Actions
     from coclab.strategy import Strategy
 
@@ -159,17 +160,18 @@ def test_multi_drop_attack_drags_first_then_taps_rest():
     cfg = load_config(EXAMPLE)
     summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
-    drag = cfg.drag_deploy_ms
-    assert adb.swipes == [
-        (int(0.091 * 1600), int(0.933 * 900), int(0.30 * 1600), int(0.60 * 900), drag),
-        (int(0.166 * 1600), int(0.933 * 900), int(0.34 * 1600), int(0.64 * 900), drag),
-        (int(0.325 * 1600), int(0.933 * 900), int(0.36 * 1600), int(0.66 * 900), drag),
-    ]
+    assert adb.swipes == []
     assert adb.taps == [
         (1, 1),
         (1, 1),
         (600, 700),  # attack, find_match, attack2
-        (int(0.32 * 1600), int(0.62 * 900)),  # dragon ke-2 (tap biasa)
+        (int(0.091 * 1600), int(0.933 * 900)),  # kartu dragon
+        (int(0.30 * 1600), int(0.60 * 900)),
+        (int(0.32 * 1600), int(0.62 * 900)),
+        (int(0.166 * 1600), int(0.933 * 900)),  # kartu balloon
+        (int(0.34 * 1600), int(0.64 * 900)),
+        (int(0.325 * 1600), int(0.933 * 900)),  # kartu wrecker
+        (int(0.36 * 1600), int(0.66 * 900)),
         (int(0.065 * 1600), int(0.75 * 900)),  # end battle
         (int(0.614 * 1600), int(0.648 * 900)),  # confirm
         (int(0.497 * 1600), int(0.849 * 900)),  # return home
