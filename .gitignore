@@ -6,3 +6,6 @@ config.json
 assets/*.png
 !assets/.gitkeep
 profiles/
+build/
+dist/
+*.spec

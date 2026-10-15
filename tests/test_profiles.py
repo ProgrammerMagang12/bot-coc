@@ -31,3 +31,19 @@ def test_merge_missing_fills_new_fields():
     assert filled == 2
     assert data["min_gold"] == 1  # yang sudah ada tidak ditimpa
     assert data["de_full_value"] == 300000
+
+
+def test_rename_profile(tmp_path):
+    profiles.save_profile("lama", {"min_gold": 1}, tmp_path)
+    profiles.rename_profile("lama", "baru", tmp_path)
+    assert profiles.list_profiles(tmp_path) == ["baru"]
+    assert profiles.load_profile("baru", tmp_path)["min_gold"] == 1
+
+
+def test_rename_profile_conflict(tmp_path):
+    profiles.save_profile("a", {}, tmp_path)
+    profiles.save_profile("b", {}, tmp_path)
+    import pytest
+
+    with pytest.raises(FileExistsError):
+        profiles.rename_profile("a", "b", tmp_path)

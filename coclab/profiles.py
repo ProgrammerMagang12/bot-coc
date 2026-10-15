@@ -56,3 +56,15 @@ def merge_missing(data: dict, template: dict) -> int:
             data[key] = value
             filled += 1
     return filled
+
+
+def rename_profile(old: str, new: str, directory: Path = PROFILES_DIR) -> Path:
+    """Ganti nama file profil (akun) dari `old` ke `new`."""
+    old_path = profile_path(old, directory)
+    new_path = profile_path(new, directory)
+    if not old_path.is_file():
+        raise FileNotFoundError(f"profil '{old}' tidak ada")
+    if new_path.exists():
+        raise FileExistsError(f"profil '{new}' sudah ada")
+    old_path.rename(new_path)
+    return new_path

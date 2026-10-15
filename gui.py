@@ -17,7 +17,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, simpledialog
 
 from coclab import profiles
 from coclab.adb import Adb
@@ -27,6 +27,30 @@ from coclab.loop import run
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "config.json" if (ROOT / "config.json").is_file() else ROOT / "config.example.json"
 RUN_UNTIL = 999  # bot jalan sampai: kamu Stop / DE penuh / pasukan habis / gagal
+
+# -- palet warna -----------------------------------------------------------------
+BG = "#14141f"
+PANEL = "#1d1d30"
+PANEL_2 = "#171726"
+SIDEBAR = "#181828"
+FIELD_BG = "#101019"
+FG = "#e8e8f5"
+FG_DIM = "#8f8fb0"
+AMBER = "#ffb454"
+GREEN = "#2ecc71"
+GREEN_DARK = "#1f9e55"
+RED = "#e74c3c"
+RED_DARK = "#b03a2e"
+BLUE = "#3498db"
+BLUE_DARK = "#2874a6"
+
+STATUS_COLORS = {
+    "running": GREEN,
+    "ok": "#5ef2c0",
+    "stopped": AMBER,
+    "failed": RED,
+    "idle": FG_DIM,
+}
 
 log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
 
@@ -40,10 +64,6 @@ FORM_FIELDS = (
     ("end_delay_s", "Maks tunggu battle (detik)"),
     ("emulator_path", "File emulator (auto-buka)"),
 )
-FORM_HINT = (
-    "Isi 0 pada 'Loot minimal: Dark Elixir' atau 'Auto-stop' untuk menonaktifkan fitur itu. "
-    "Argumen emulator diatur otomatis."
-)
 ARMY_FIELDS = (
     ("dragon_drops", "Dragon"),
     ("balloon_drops", "Balloon"),
@@ -51,6 +71,10 @@ ARMY_FIELDS = (
     ("extra_troop", "Extra troop"),
     ("rage_spell", "Rage"),
     ("freeze_spell", "Freeze"),
+)
+FORM_HINT = (
+    "Isi 0 pada 'Loot minimal: Dark Elixir' atau 'Auto-stop' untuk menonaktifkan. "
+    "Bot jalan sampai kamu Stop / DE penuh / pasukan habis."
 )
 
 
@@ -81,11 +105,25 @@ class _Instance:
         return self.thread is not None and self.thread.is_alive()
 
 
+def _status_kind(text: str) -> str:
+    low = (text or "").lower()
+    if low.startswith("jalan"):
+        return "running"
+    if low.startswith("ok"):
+        return "ok"
+    if low.startswith("dihentikan") or low.startswith("berhenti"):
+        return "stopped"
+    if low.startswith("gagal") or low.startswith("error") or low.startswith("emulator"):
+        return "failed"
+    return "idle"
+
+
 class App:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        root.title("GARUDA — CoC Bot")
-        root.geometry("860x620")
+        root.title("GARUDA — CoC Raid Bot")
+        root.geometry("1000x660")
+        root.configure(bg=BG)
         self.instances: dict[str, _Instance] = {}
         self.form_vars: dict[str, tk.StringVar] = {}
         self.army_vars: dict[str, tk.StringVar] = {}
@@ -95,73 +133,223 @@ class App:
         self.root.after(150, self._drain_logs)
 
     # -- UI -----------------------------------------------------------------
+    def _flat_button(self, parent, text, bg, bg_dark, command, font=None, width=None):
+        btn = tk.Button(
+            parent,
+            text=text,
+            bg=bg,
+            fg="white",
+            activebackground=bg_dark,
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            command=command,
+            font=font or ("Segoe UI", 9, "bold"),
+            bd=0,
+            padx=10,
+            pady=4,
+            **(dict(width=width) if width else {}),
+        )
+        return btn
+
     def _build_ui(self) -> None:
-        left = ttk.Frame(self.root, padding=8)
-        left.pack(side="left", fill="y")
-        ttk.Label(left, text="Akun / Instance").pack(anchor="w")
-        self.listbox = tk.Listbox(left, width=22, exportselection=False)
-        self.listbox.pack(fill="y", expand=True)
+        # header
+        header = tk.Frame(self.root, bg=PANEL, height=54)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        tk.Label(
+            header, text="🦅  GARUDA", bg=PANEL, fg=AMBER, font=("Segoe UI", 16, "bold")
+        ).pack(side="left", padx=14)
+        tk.Label(
+            header,
+            text="CoC Raid Bot — multi akun",
+            bg=PANEL,
+            fg=FG_DIM,
+            font=("Segoe UI", 9),
+        ).pack(side="left", pady=(9, 0))
+
+        body = tk.Frame(self.root, bg=BG)
+        body.pack(fill="both", expand=True, padx=10, pady=8)
+
+        # sidebar
+        side = tk.Frame(body, bg=SIDEBAR, width=190)
+        side.pack(side="left", fill="y", padx=(0, 8))
+        side.pack_propagate(False)
+        tk.Label(side, text="AKUN", bg=SIDEBAR, fg=AMBER, font=("Segoe UI", 10, "bold")).pack(
+            anchor="w", padx=10, pady=(8, 4)
+        )
+        self.listbox = tk.Listbox(
+            side,
+            bg=PANEL_2,
+            fg=FG,
+            selectbackground=AMBER,
+            selectforeground="#1a1a2a",
+            relief="flat",
+            highlightthickness=0,
+            font=("Segoe UI", 10),
+            activestyle="none",
+        )
+        self.listbox.pack(fill="both", expand=True, padx=8)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._on_select())
-        btns = ttk.Frame(left)
-        btns.pack(fill="x", pady=4)
-        ttk.Button(btns, text="Tambah", command=self._add_profile).pack(side="left", expand=True)
-        ttk.Button(btns, text="Hapus", command=self._delete_profile).pack(side="left", expand=True)
-
-        right = ttk.Frame(self.root, padding=8)
-        right.pack(side="left", fill="both", expand=True)
-
-        form = ttk.LabelFrame(right, text="Pengaturan", padding=8)
-        form.pack(fill="x")
-        for i, (key, label) in enumerate(FORM_FIELDS):
-            r, c = divmod(i, 2)
-            ttk.Label(form, text=label).grid(row=r, column=c * 2, sticky="w", padx=4, pady=2)
-            var = tk.StringVar()
-            self.form_vars[key] = var
-            ttk.Entry(form, textvariable=var, width=18).grid(row=r, column=c * 2 + 1, sticky="w", padx=4)
-        hint_row = (len(FORM_FIELDS) + 1) // 2
-        ttk.Label(form, text=FORM_HINT, foreground="#666", wraplength=520).grid(
-            row=hint_row, column=0, columnspan=4, sticky="w", pady=(6, 0)
+        btns = tk.Frame(side, bg=SIDEBAR)
+        btns.pack(fill="x", padx=8, pady=8)
+        self._flat_button(btns, "+ Tambah", BLUE, BLUE_DARK, self._add_profile).pack(
+            fill="x", pady=2
+        )
+        self._flat_button(btns, "✎ Ganti Nama", "#c98a2e", "#a06f22", self._rename_profile).pack(
+            fill="x", pady=2
+        )
+        self._flat_button(btns, "✕ Hapus", RED, RED_DARK, self._delete_profile).pack(
+            fill="x", pady=2
         )
 
-        army = ttk.LabelFrame(right, text="Jumlah pasukan (tap per grup)", padding=8)
-        army.pack(fill="x", pady=6)
+        # main area
+        main = tk.Frame(body, bg=BG)
+        main.pack(side="left", fill="both", expand=True)
+
+        form_panel = tk.Frame(main, bg=PANEL)
+        form_panel.pack(fill="x", pady=(0, 6))
+        tk.Label(
+            form_panel, text="⚙  PENGATURAN", bg=PANEL, fg=AMBER, font=("Segoe UI", 10, "bold")
+        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=10, pady=(6, 2))
+        for i, (key, label) in enumerate(FORM_FIELDS):
+            r, c = divmod(i, 2)
+            tk.Label(form_panel, text=label, bg=PANEL, fg=FG, font=("Segoe UI", 9)).grid(
+                row=r + 1, column=c * 2, sticky="w", padx=(10, 4), pady=2
+            )
+            var = tk.StringVar()
+            self.form_vars[key] = var
+            tk.Entry(
+                form_panel,
+                textvariable=var,
+                width=20,
+                bg=FIELD_BG,
+                fg=FG,
+                insertbackground=AMBER,
+                relief="flat",
+                highlightthickness=1,
+                highlightbackground="#31314d",
+                highlightcolor=AMBER,
+            ).grid(row=r + 1, column=c * 2 + 1, sticky="w", padx=(0, 14), pady=2, ipady=3)
+        hint_row = (len(FORM_FIELDS) + 1) // 2 + 1
+        tk.Label(
+            form_panel,
+            text=FORM_HINT,
+            bg=PANEL,
+            fg=FG_DIM,
+            font=("Segoe UI", 8),
+            wraplength=640,
+            justify="left",
+        ).grid(row=hint_row, column=0, columnspan=4, sticky="w", padx=10, pady=(4, 8))
+
+        army_panel = tk.Frame(main, bg=PANEL)
+        army_panel.pack(fill="x", pady=(0, 6))
+        tk.Label(
+            army_panel,
+            text="🛡  JUMLAH PASUKAN (tap per grup)",
+            bg=PANEL,
+            fg=AMBER,
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=0, column=0, columnspan=6, sticky="w", padx=10, pady=(6, 2))
         for i, (key, label) in enumerate(ARMY_FIELDS):
             r, c = divmod(i, 3)
-            ttk.Label(army, text=label).grid(row=r, column=c * 2, sticky="w", padx=4, pady=2)
+            tk.Label(army_panel, text=label, bg=PANEL, fg=FG, font=("Segoe UI", 9)).grid(
+                row=r + 1, column=c * 2, sticky="w", padx=(10, 4), pady=3
+            )
             var = tk.StringVar()
             self.army_vars[key] = var
-            ttk.Entry(army, textvariable=var, width=8).grid(row=r, column=c * 2 + 1, sticky="w", padx=4)
+            tk.Entry(
+                army_panel,
+                textvariable=var,
+                width=6,
+                bg=FIELD_BG,
+                fg=FG,
+                insertbackground=AMBER,
+                relief="flat",
+                highlightthickness=1,
+                highlightbackground="#31314d",
+                highlightcolor=AMBER,
+                justify="center",
+            ).grid(row=r + 1, column=c * 2 + 1, sticky="w", padx=(0, 18), pady=3, ipady=3)
 
-        ctrl = ttk.Frame(right)
-        ctrl.pack(fill="x", pady=4)
-        ttk.Button(ctrl, text="Simpan", command=self._save_current).pack(side="left")
-        self.start_btn = ttk.Button(ctrl, text="▶ Start", command=self._start)
-        self.start_btn.pack(side="left", padx=6)
-        self.stop_btn = ttk.Button(ctrl, text="■ Stop", command=self._stop)
-        self.stop_btn.pack(side="left")
+        ctrl = tk.Frame(main, bg=BG)
+        ctrl.pack(fill="x", pady=(0, 6))
+        self._flat_button(ctrl, "💾 Simpan", BLUE, BLUE_DARK, self._save_current).pack(side="left")
+        self._flat_button(
+            ctrl,
+            "▶  START",
+            GREEN,
+            GREEN_DARK,
+            self._start,
+            font=("Segoe UI", 11, "bold"),
+            width=12,
+        ).pack(side="left", padx=8)
+        self._flat_button(
+            ctrl, "■  STOP", RED, RED_DARK, self._stop, font=("Segoe UI", 11, "bold"), width=10
+        ).pack(side="left")
         self.status_var = tk.StringVar(value="—")
-        ttk.Label(ctrl, textvariable=self.status_var).pack(side="left", padx=12)
+        self.status_label = tk.Label(
+            ctrl, textvariable=self.status_var, bg=BG, fg=FG_DIM, font=("Segoe UI", 10, "bold")
+        )
+        self.status_label.pack(side="left", padx=14)
 
-        logframe = ttk.LabelFrame(right, text="Log", padding=4)
-        logframe.pack(fill="both", expand=True)
-        self.log_text = tk.Text(logframe, height=14, state="disabled", wrap="none")
+        log_panel = tk.Frame(main, bg=PANEL)
+        log_panel.pack(fill="both", expand=True)
+        tk.Label(
+            log_panel, text="📜  LOG", bg=PANEL, fg=AMBER, font=("Segoe UI", 10, "bold")
+        ).pack(anchor="w", padx=10, pady=(6, 0))
+        log_wrap = tk.Frame(log_panel, bg=PANEL)
+        log_wrap.pack(fill="both", expand=True, padx=8, pady=6)
+        scroll = tk.Scrollbar(log_wrap, bg=PANEL, troughcolor=PANEL_2, bd=0)
+        scroll.pack(side="right", fill="y")
+        self.log_text = tk.Text(
+            log_wrap,
+            height=12,
+            state="disabled",
+            wrap="none",
+            bg="#0c0c16",
+            fg="#c9c9dd",
+            relief="flat",
+            highlightthickness=0,
+            font=("Consolas", 9),
+            yscrollcommand=scroll.set,
+        )
         self.log_text.pack(fill="both", expand=True)
+        scroll.config(command=self.log_text.yview)
+        self.log_text.tag_configure("err", foreground="#ff8a8a")
+        self.log_text.tag_configure("ok", foreground="#7dffb8")
+        self.log_text.tag_configure("warn", foreground="#ffd27d")
 
     # -- profil -------------------------------------------------------------
-    def _refresh_profiles(self) -> None:
+    def _set_status_label(self, name: str | None) -> None:
+        text = self.status.get(name or "", "—")
+        self.status_var.set(text)
+        self.status_label.config(fg=STATUS_COLORS.get(_status_kind(text), FG_DIM))
+
+    def _refresh_profiles(self, select: str | None = None) -> None:
         self.listbox.delete(0, "end")
-        for name in profiles.list_profiles():
-            suffix = "  ●" if name in self.instances and self.instances[name].running else ""
-            self.listbox.insert("end", f"{name}{suffix}")
-        if self.listbox.size() and self.listbox.curselection() == ():
-            self.listbox.selection_set(0)
+        names = profiles.list_profiles()
+        for name in names:
+            marker = "● " if name in self.instances and self.instances[name].running else ""
+            self.listbox.insert("end", f"{marker}{name}")
+            idx = self.listbox.size() - 1
+            kind = _status_kind(self.status.get(name, ""))
+            color = STATUS_COLORS["running"] if marker else STATUS_COLORS.get(kind, FG)
+            self.listbox.itemconfig(idx, fg=color)
+        if names and self.listbox.curselection() == ():
+            target = select if select in names else names[0]
+            self.listbox.selection_set(names.index(target))
+            self._on_select()
+        elif select in names:
+            self.listbox.selection_clear(0, "end")
+            self.listbox.selection_set(names.index(select))
             self._on_select()
 
     def _selected_name(self) -> str | None:
         sel = self.listbox.curselection()
         if not sel:
             return None
-        return self.listbox.get(sel[0]).replace("  ●", "")
+        return self.listbox.get(sel[0]).lstrip("● ")
 
     def _on_select(self) -> None:
         name = self._selected_name()
@@ -173,12 +361,11 @@ class App:
             messagebox.showerror("Gagal memuat", str(exc))
             return
         for key, _label in FORM_FIELDS:
-            value = data.get(key, "")
-            self.form_vars[key].set(str(value))
+            self.form_vars[key].set(str(data.get(key, "")))
         army = data.get("army", {})
         for key, _label in ARMY_FIELDS:
             self.army_vars[key].set(str(army.get(key, "")))
-        self.status_var.set(self.status.get(name, "—"))
+        self._set_status_label(name)
 
     def _add_profile(self) -> None:
         name = simpledialog.askstring("Profil baru", "Nama akun/instance:", parent=self.root)
@@ -192,7 +379,34 @@ class App:
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Gagal", str(exc))
             return
-        self._refresh_profiles()
+        self._refresh_profiles(select=name)
+
+    def _rename_profile(self) -> None:
+        old = self._selected_name()
+        if not old:
+            return
+        if self.instances.get(old) and self.instances[old].running:
+            messagebox.showinfo("Masih jalan", "Stop dulu instance ini sebelum ganti nama.")
+            return
+        new = simpledialog.askstring(
+            "Ganti nama akun", f"Nama baru untuk '{old}':", parent=self.root, initialvalue=old
+        )
+        if not new or new == old:
+            return
+        new = "".join(ch for ch in new if ch.isalnum() or ch in "-_ ").strip()
+        if not new:
+            return
+        try:
+            profiles.rename_profile(old, new)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Gagal ganti nama", str(exc))
+            return
+        inst = self.instances.pop(old, None)
+        if inst is not None:
+            self.instances[new] = inst
+        if old in self.status:
+            self.status[new] = self.status.pop(old)
+        self._refresh_profiles(select=new)
 
     def _delete_profile(self) -> None:
         name = self._selected_name()
@@ -205,6 +419,7 @@ class App:
             return
         profiles.profile_path(name).unlink(missing_ok=True)
         self.instances.pop(name, None)
+        self.status.pop(name, None)
         self._refresh_profiles()
 
     def _save_current(self) -> None:
@@ -233,6 +448,7 @@ class App:
                     army[key] = int(raw)
             profiles.save_profile(name, data)
             self.status_var.set("tersimpan ✓")
+            self.status_label.config(fg=GREEN)
         except (ValueError, ConfigError) as exc:
             messagebox.showerror("Input tidak valid", str(exc))
         except Exception as exc:  # noqa: BLE001
@@ -254,11 +470,12 @@ class App:
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Config tidak valid", str(exc))
             return
-        inst.thread = threading.Thread(target=self._run_instance, args=(name, cfg, inst), daemon=True)
+        inst.thread = threading.Thread(
+            target=self._run_instance, args=(name, cfg, inst), daemon=True
+        )
         inst.thread.start()
         self.status[name] = f"jalan ({cfg.device_address})"
-        self._refresh_profiles()
-        self.status_var.set(self.status[name])
+        self._refresh_profiles(select=name)
 
     def _device_online(self, cfg) -> bool:
         try:
@@ -274,7 +491,7 @@ class App:
         if self._device_online(cfg):
             return True
         if not cfg.emulator_path:
-            log_queue.put((name, "Device offline & Path emulator kosong — isi di pengaturan."))
+            log_queue.put((name, "Device offline & File emulator kosong — isi di pengaturan."))
             return False
         cmd = [cfg.emulator_path, *cfg.emulator_args]
         log_queue.put((name, f"Emulator belum jalan — menjalankan: {' '.join(cmd)}"))
@@ -309,12 +526,7 @@ class App:
                 log_queue.put((name, "<<< FAILED: emulator tidak siap"))
                 self.status[name] = "emulator tidak siap"
                 return
-            summary = run(
-                cfg,
-                "live",
-                RUN_UNTIL,
-                should_stop=inst.stop_event.is_set,
-            )
+            summary = run(cfg, "live", RUN_UNTIL, should_stop=inst.stop_event.is_set)
             if summary.ok:
                 extra = f" ({summary.reason})" if summary.reason else ""
                 line = f"<<< OK: {summary.cycles_done} cycle selesai{extra}"
@@ -342,7 +554,7 @@ class App:
         if inst and inst.running:
             inst.stop_event.set()
             self.status[name] = "berhenti diminta…"
-            self.status_var.set(self.status[name])
+            self._set_status_label(name)
 
     # -- log pump -----------------------------------------------------------
     def _drain_logs(self) -> None:
@@ -351,11 +563,18 @@ class App:
                 name, msg = log_queue.get_nowait()
                 if msg == "__DONE__":
                     self._refresh_profiles()
-                    if name == self._selected_name():
-                        self.status_var.set(self.status.get(name, "—"))
+                    self._set_status_label(self._selected_name())
                     continue
+                upper = msg.upper()
+                tag = ()
+                if "FAILED" in upper or "ERROR" in upper or "GAGAL" in upper:
+                    tag = ("err",)
+                elif "OK:" in upper or "✓" in msg:
+                    tag = ("ok",)
+                elif "WARNING" in upper:
+                    tag = ("warn",)
                 self.log_text.configure(state="normal")
-                self.log_text.insert("end", f"[{name}] {msg}\n")
+                self.log_text.insert("end", f"[{name}] {msg}\n", tag)
                 self.log_text.see("end")
                 self.log_text.configure(state="disabled")
         except queue.Empty:
