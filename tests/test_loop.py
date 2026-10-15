@@ -949,10 +949,10 @@ def test_jitter_applied_to_map_drops(tmp_path):
     p.write_text(json.dumps(data))
     summary, adb, _ = _run_with_strategy(None, tmp_config=p)
     assert summary.ok
-    # dragon [0.5,0.5] → arah + : tx ∈ [800, 839], ty ∈ [423, 450]
-    assert any(800 <= tx <= 840 and 421 <= ty <= 450 for tx, ty in adb.taps)
-    # balloon [0.55,0.5] → arah − (ke tengah): tx ∈ [842, 880], ty ∈ [423, 450]
-    assert any(842 <= tx <= 880 and 421 <= ty <= 450 for tx, ty in adb.taps)
+    # dragon [0.5,0.5] → arah + (ke kanan) & ke atas: tx ∈ (800, 838], ty ∈ [423, 450)
+    assert any(800 < tx <= 840 and 421 <= ty < 450 for tx, ty in adb.taps)
+    # balloon [0.55,0.5] → arah − (ke tengah) & ke atas: tx ∈ [842, 880), ty ∈ [423, 450)
+    assert any(842 <= tx < 880 and 421 <= ty < 450 for tx, ty in adb.taps)
 
 
 def test_jitter_zero_taps_exact(tmp_path):
