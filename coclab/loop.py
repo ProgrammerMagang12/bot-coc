@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from coclab import vision
+from coclab import vision, wallupgrade
 from coclab.actions import Actions
 from coclab.adb import Adb, AdbError
 from coclab.capture import capture as capture_default
@@ -277,6 +277,32 @@ class _Session:
         self.deps.sleep(8)
         return StepResult(True)
 
+    def _run_wall_upgrade(self) -> None:
+        """Optional wall upgrade after returning home; failures never break the cycle."""
+        try:
+            result = wallupgrade.run_wall_upgrade(
+                self.cfg.wall_upgrade,
+                capture=self._capture,
+                load_image=self._img,
+                find_template=self._match_safe,
+                crop_percent=self.deps.crop_percent,
+                ocr_boxes=vision.ocr_text_boxes,
+                read_gold=lambda crop: self.deps.ocr_digits(
+                    vision.enhance_numeric_crop(crop)
+                ),
+                tap_px=self.actions.tap_px,
+                tap_percent=self.actions.tap_percent,
+                swipe_percent=self.actions.swipe_percent,
+                sleep=self.deps.sleep,
+            )
+            logger.info(
+                "Wall upgrade: %s%s",
+                result.status,
+                f" ({result.reason})" if result.reason else "",
+            )
+        except Exception as exc:  # noqa: BLE001 - optional step, never fatal
+            logger.warning("Wall upgrade failed: %s", exc)
+
     # -- cycle -----------------------------------------------------------
 
     def run_cycle(self) -> StepResult:
@@ -305,7 +331,10 @@ class _Session:
         result = self.attack()
         if not result.ok:
             return result
-        return self.return_home()
+        result = self.return_home()
+        if result.ok and self.cfg.wall_upgrade.enabled:
+            self._run_wall_upgrade()
+        return result
 
 
 def run(config: Config, mode: str, cycles: int, deps: Deps | None = None) -> RunSummary:

@@ -181,3 +181,40 @@ def test_attack_falls_back_to_legacy_without_strategies():
     legacy_card = (int(0.251 * 1600), int(0.933 * 900))
     drop = (int(0.35 * 1600), int(0.72 * 900))
     assert legacy_card in adb.taps and drop in adb.taps
+
+
+def test_wall_upgrade_wired_when_enabled(monkeypatch, tmp_path):
+    import json
+
+    from coclab import loop as loop_mod
+
+    data = json.loads(EXAMPLE.read_text())
+    data["wall_upgrade"]["enabled"] = True
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+
+    calls = {"n": 0}
+
+    def fake_wall(cfg, **kwargs):
+        calls["n"] += 1
+        return type("R", (), {"status": "skipped", "reason": "test"})()
+
+    monkeypatch.setattr(loop_mod.wallupgrade, "run_wall_upgrade", fake_wall)
+    deps, _ = make_deps(full_script(), [])
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and calls["n"] == 1
+
+
+def test_wall_upgrade_not_called_when_disabled(monkeypatch):
+    from coclab import loop as loop_mod
+
+    calls = {"n": 0}
+
+    def fake_wall(cfg, **kwargs):
+        calls["n"] += 1
+        return type("R", (), {"status": "skipped", "reason": "test"})()
+
+    monkeypatch.setattr(loop_mod.wallupgrade, "run_wall_upgrade", fake_wall)
+    deps, _ = make_deps(full_script(), [])
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and calls["n"] == 0

@@ -38,6 +38,6 @@ Prototipe otomasi **original** (kode ditulis sendiri dari nol) untuk satu siklus
 - **Observe default**; `--live` wajib eksplisit. Ctrl+C = stop bersih (exit code 130).
 - OCR loot memakai `rapidocr-onnxruntime` bila terpasang; jika tidak ada → kebijakan `on_ocr_fail`
   (default `stop` = berhenti, aman).
-- v1 belum termasuk: zoom-out otomatis (lakukan manual sebelum `--live`), strategi multi-drop,
-  heroes/spells, wall upgrade — direncanakan sebagai iterasi berikutnya.
+- v2: serangan **multi-drop** dari `AttackStrategies.json` (buat dengan `py tools/make_strategy.py --image <scout.png> --name <nama>`); **wall upgrade** opsional via `wall_upgrade.enabled`
+  (default `false`; wajib kalibrasi `logo_up.png` + titik-titik dulu). Heroes/spells/skills = v2.2; zoom-out masih manual sebelum `--live`.
 - Disclaimer lengkap ada di `docs/superpowers/specs/2026-10-15-coc-lab-v1-design.md`.
