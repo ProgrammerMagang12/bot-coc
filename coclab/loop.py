@@ -219,10 +219,14 @@ class _Session:
     def _drop_group(self, card_key: str, points: list) -> None:
         if not points:
             return
-        self.actions.tap_percent(*self.cfg.card_points[card_key])
-        logger.info("Select %s card", card_key)
+        card_x, card_y = self.cfg.card_points[card_key]
+        first_x, first_y = points[0]
+        self.actions.swipe_percent(
+            card_x, card_y, first_x, first_y, self.cfg.drag_deploy_ms
+        )
+        logger.info("Deploy %s (drag, %d point(s))", card_key, len(points))
         self.deps.sleep(0.5)
-        for xp, yp in points:
+        for xp, yp in points[1:]:
             self.actions.tap_percent(xp, yp)
             self.deps.sleep(self.cfg.tap_delay_ms / 1000)
 
@@ -243,9 +247,13 @@ class _Session:
                 self._drop_group("wall_wrecker", [chosen.wall_wrecker_drop])
         else:
             logger.info("No strategies loaded; legacy single drop")
-            self.actions.tap_percent(*self.cfg.drop_card_point)
+            card_x, card_y = self.cfg.drop_card_point
+            first_x, first_y = self.cfg.drop_points[0]
+            self.actions.swipe_percent(
+                card_x, card_y, first_x, first_y, self.cfg.drag_deploy_ms
+            )
             self.deps.sleep(0.5)
-            for xp, yp in self.cfg.drop_points:
+            for xp, yp in self.cfg.drop_points[1:]:
                 self.actions.tap_percent(xp, yp)
                 self.deps.sleep(self.cfg.tap_delay_ms / 1000)
 

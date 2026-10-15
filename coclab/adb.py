@@ -94,3 +94,30 @@ class Adb:
         dest_path = Path(dest)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         dest_path.write_bytes(data)
+
+    def swipe(
+        self,
+        device: str,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        duration_ms: int = 300,
+    ) -> None:
+        """Touch-drag from (x1, y1) to (x2, y2); used for drag-to-deploy."""
+        self._ensure_online(device)
+        self._run(
+            [
+                self.adb_path,
+                "-s",
+                device,
+                "shell",
+                "input",
+                "swipe",
+                str(x1),
+                str(y1),
+                str(x2),
+                str(y2),
+                str(duration_ms),
+            ]
+        )

@@ -6,7 +6,8 @@
   "loot_roi": [0.02, 0.05, 0.35, 0.12],
   "on_ocr_fail": "stop",
   "drop_points": [[0.35, 0.72]],
-  "drop_card_point": [0.251, 0.933],
+  "drop_card_point": [0.091, 0.933],
+  "drag_deploy_ms": 800,
   "tap_delay_ms": 150,
   "end_delay_s": 20,
   "end_battle_point": [0.065, 0.75],
@@ -19,9 +20,9 @@
   "loot_settle_s": 1.5,
   "strategy_file": "AttackStrategies.json",
   "card_points": {
-    "dragon": [0.251, 0.933],
-    "balloon": [0.328, 0.933],
-    "wall_wrecker": [0.39, 0.933]
+    "dragon": [0.091, 0.933],
+    "balloon": [0.166, 0.933],
+    "wall_wrecker": [0.325, 0.933]
   },
   "wall_upgrade": {
     "enabled": false,

@@ -31,16 +31,23 @@ class Actions:
             return
         self.adb.tap(self.device, x, y)
 
-    def swipe_percent(self, x1p: float, y1p: float, x2p: float, y2p: float) -> None:
+    def swipe_percent(
+        self, x1p: float, y1p: float, x2p: float, y2p: float, duration_ms: int = 300
+    ) -> None:
         self.swipe_px(
             int(x1p * self.screen[0]),
             int(y1p * self.screen[1]),
             int(x2p * self.screen[0]),
             int(y2p * self.screen[1]),
+            duration_ms,
         )
 
-    def swipe_px(self, x1: int, y1: int, x2: int, y2: int) -> None:
+    def swipe_px(
+        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
+    ) -> None:
         if self.mode == "observe":
-            logger.info("[OBSERVE] swipe (%d, %d) -> (%d, %d)", x1, y1, x2, y2)
+            logger.info(
+                "[OBSERVE] swipe (%d, %d) -> (%d, %d) in %dms", x1, y1, x2, y2, duration_ms
+            )
             return
-        self.adb.swipe(self.device, x1, y1, x2, y2)
+        self.adb.swipe(self.device, x1, y1, x2, y2, duration_ms)

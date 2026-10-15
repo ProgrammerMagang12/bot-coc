@@ -36,6 +36,7 @@ class Config:
     on_ocr_fail: str
     drop_card_point: list[float]
     drop_points: list[list[float]]
+    drag_deploy_ms: int
     tap_delay_ms: int
     end_delay_s: int
     end_battle_point: list[float]
@@ -187,6 +188,7 @@ def load_config(path: str | Path) -> Config:
         on_ocr_fail=on_ocr_fail,
         drop_card_point=_point(_require(data, "drop_card_point"), "drop_card_point"),
         drop_points=[_point(pair, "drop_points") for pair in drop_raw],
+        drag_deploy_ms=_positive_int(_require(data, "drag_deploy_ms"), "drag_deploy_ms"),
         tap_delay_ms=_positive_int(_require(data, "tap_delay_ms"), "tap_delay_ms"),
         end_delay_s=_positive_int(_require(data, "end_delay_s"), "end_delay_s"),
         end_battle_point=_point(_require(data, "end_battle_point"), "end_battle_point"),

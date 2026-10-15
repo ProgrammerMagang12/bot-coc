@@ -22,8 +22,8 @@ class RecordingAdb:
     def tap(self, d, x, y):
         self.taps.append((x, y))
 
-    def swipe(self, d, x1, y1, x2, y2):
-        self.swipes.append((x1, y1, x2, y2))
+    def swipe(self, d, x1, y1, x2, y2, duration_ms=300):
+        self.swipes.append((x1, y1, x2, y2, duration_ms))
 
 
 class FakeActions:
@@ -36,13 +36,14 @@ class FakeActions:
     def tap_px(self, x, y):
         self.adb.tap(self.device, x, y)
 
-    def swipe_percent(self, x1p, y1p, x2p, y2p):
+    def swipe_percent(self, x1p, y1p, x2p, y2p, duration_ms=300):
         self.adb.swipe(
             self.device,
             int(x1p * 1600),
             int(y1p * 900),
             int(x2p * 1600),
             int(y2p * 900),
+            duration_ms,
         )
 
 

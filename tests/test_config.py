@@ -55,7 +55,7 @@ def test_example_config_loot_settle():
 
 def test_example_config_drop_card_point():
     cfg = load_config(EXAMPLE)
-    assert cfg.drop_card_point == [0.251, 0.933]
+    assert cfg.drop_card_point == [0.091, 0.933]
 
 
 def test_invalid_drop_card_point_rejected(tmp_path):
@@ -99,4 +99,18 @@ def test_missing_card_point_key_rejected(tmp_path):
     p = tmp_path / "c.json"
     p.write_text(json.dumps(data))
     with pytest.raises(ConfigError, match="balloon"):
+        load_config(p)
+
+
+def test_example_config_drag_deploy_ms():
+    cfg = load_config(EXAMPLE)
+    assert cfg.drag_deploy_ms == 800
+
+
+def test_invalid_drag_deploy_rejected(tmp_path):
+    data = json.loads(EXAMPLE.read_text())
+    data["drag_deploy_ms"] = 0
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    with pytest.raises(ConfigError, match="drag_deploy_ms"):
         load_config(p)

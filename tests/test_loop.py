@@ -127,20 +127,21 @@ def test_return_home_skips_missing_event_template():
     assert summary.ok
 
 
-def test_live_attack_selects_troop_card_first():
+def test_live_attack_drags_card_first_legacy():
     from coclab.actions import Actions
 
-    states = []
-    deps, adb = make_deps(full_script(), states)
+    deps, adb = make_deps(full_script(), [])
     deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
-    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
+    deps.load_strategies = lambda path: []
+    cfg = load_config(EXAMPLE)
+    summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
-    card = (int(0.251 * 1600), int(0.933 * 900))
-    drop = (int(0.35 * 1600), int(0.72 * 900))  # dari config.example.json
-    assert card in adb.taps and adb.taps.index(card) < adb.taps.index(drop)
+    card = (int(0.091 * 1600), int(0.933 * 900))
+    drop = (int(0.35 * 1600), int(0.72 * 900))
+    assert adb.swipes == [(card[0], card[1], drop[0], drop[1], cfg.drag_deploy_ms)]
 
 
-def test_multi_drop_attack_uses_strategy():
+def test_multi_drop_attack_drags_first_then_taps_rest():
     from coclab.actions import Actions
     from coclab.strategy import Strategy
 
@@ -155,32 +156,24 @@ def test_multi_drop_attack_uses_strategy():
             wall_wrecker_drop=[0.36, 0.66],
         )
     ]
-    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
+    cfg = load_config(EXAMPLE)
+    summary = run(cfg, "live", 1, deps=deps)
     assert summary.ok
-    expected_sequence = [
-        (int(0.251 * 1600), int(0.933 * 900)),  # kartu dragon
-        (int(0.30 * 1600), int(0.60 * 900)),
-        (int(0.32 * 1600), int(0.62 * 900)),
-        (int(0.328 * 1600), int(0.933 * 900)),  # kartu balloon
-        (int(0.34 * 1600), int(0.64 * 900)),
-        (int(0.39 * 1600), int(0.933 * 900)),   # kartu wall wrecker
-        (int(0.36 * 1600), int(0.66 * 900)),
+    drag = cfg.drag_deploy_ms
+    assert adb.swipes == [
+        (int(0.091 * 1600), int(0.933 * 900), int(0.30 * 1600), int(0.60 * 900), drag),
+        (int(0.166 * 1600), int(0.933 * 900), int(0.34 * 1600), int(0.64 * 900), drag),
+        (int(0.325 * 1600), int(0.933 * 900), int(0.36 * 1600), int(0.66 * 900), drag),
     ]
-    # taps: [0]=attack, [1]=find_match, [2]=attack2, lalu urutan serangan
-    assert adb.taps[3 : 3 + len(expected_sequence)] == expected_sequence
-
-
-def test_attack_falls_back_to_legacy_without_strategies():
-    from coclab.actions import Actions
-
-    deps, adb = make_deps(full_script(), [])
-    deps.actions_factory = lambda a, d, m, s: Actions(a, d, m, s)
-    deps.load_strategies = lambda path: []
-    summary = run(load_config(EXAMPLE), "live", 1, deps=deps)
-    assert summary.ok
-    legacy_card = (int(0.251 * 1600), int(0.933 * 900))
-    drop = (int(0.35 * 1600), int(0.72 * 900))
-    assert legacy_card in adb.taps and drop in adb.taps
+    assert adb.taps == [
+        (1, 1),
+        (1, 1),
+        (600, 700),  # attack, find_match, attack2
+        (int(0.32 * 1600), int(0.62 * 900)),  # dragon ke-2 (tap biasa)
+        (int(0.065 * 1600), int(0.75 * 900)),  # end battle
+        (int(0.614 * 1600), int(0.648 * 900)),  # confirm
+        (int(0.497 * 1600), int(0.849 * 900)),  # return home
+    ]
 
 
 def test_wall_upgrade_wired_when_enabled(monkeypatch, tmp_path):
