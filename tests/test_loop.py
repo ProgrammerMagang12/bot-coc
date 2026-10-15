@@ -374,7 +374,12 @@ def test_find_attack_launches_coc_when_closed():
 
     def shell_fn(cmd):
         if "ps -A" in cmd:
-            return ""
+            # CoC "hidup" setelah am start dijalankan
+            return (
+                "com.supercell.clashofclans"
+                if any("am start" in c for c in adb.shells)
+                else ""
+            )
         if "resolve-activity" in cmd:
             return "priority=0 x\ncom.supercell.clashofclans/com.supercell.titan.GameApp"
         if "am start" in cmd:
@@ -467,6 +472,24 @@ def test_build_army_clear_build_verify(tmp_path):
     assert (int(0.05 * 1600), int(0.70 * 900)) in adb.taps  # buka panel
     assert (int(0.90 * 1600), int(0.20 * 900)) in adb.taps  # clear
     assert (int(0.95 * 1600), int(0.05 * 900)) in adb.taps  # tutup
+
+
+def test_coc_crash_mid_matchmaking_relaunches(tmp_path):
+    states = []
+    script = full_script()
+    deps, adb = make_deps(script, states)
+    calls = {"n": 0}
+
+    def shell_fn(cmd):
+        if "ps -A" in cmd:
+            calls["n"] += 1
+            return "" if calls["n"] == 1 else "com.supercell.clashofclans"
+        return "ok"
+
+    adb.shell_fn = shell_fn
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok and summary.cycles_done == 1
+    assert any("am start" in c for c in adb.shells)  # CoC dibuka ulang
 
 
 def test_army_mismatch_trains_then_retries(tmp_path):

@@ -176,6 +176,14 @@ class _Session:
                 return line
         return None
 
+    def _ensure_coc(self) -> bool:
+        """False bila CoC ternyata mati/crash (sudah dicoba dibuka ulang)."""
+        if self._coc_running():
+            return True
+        logger.warning("CoC terdeteksi tertutup/crash - membuka ulang aplikasi")
+        self._launch_coc()
+        return False
+
     def _launch_coc(self) -> None:
         """CoC close/DC: buka aplikasinya lalu tunggu loading."""
         logger.warning("CoC tidak jalan — membuka aplikasi CoC...")
@@ -407,6 +415,8 @@ class _Session:
         while True:
             if self.deps.should_stop():
                 return StepResult(False, "stopped by user")
+            if not self._ensure_coc():
+                return StepResult(False, "coc_restarted")
             shot = self._capture("matchmaking.png")
             if shot is None:
                 return StepResult(False, "matchmaking capture failed")
@@ -615,6 +625,8 @@ class _Session:
                     self.actions.tap_percent(xp, yp)
                 logger.info("Trigger hero skills (t=%ds)", second)
             if second % 5 == 4:
+                if not self._ensure_coc():
+                    return StepResult(False, "coc_restarted")
                 shot = self._capture("battle_end.png")
                 if shot is not None:
                     if self._handle_disconnected(shot):
@@ -638,6 +650,10 @@ class _Session:
         self._state(BotState.RETURN_HOME)
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
         while True:
+            if self.deps.should_stop():
+                return StepResult(False, "stopped by user")
+            if not self._ensure_coc():
+                return StepResult(False, "coc_restarted")
             shot = self._capture("returnhome.png")
             if shot is None:
                 return StepResult(False, "return home capture failed")
@@ -648,8 +664,6 @@ class _Session:
             claim = self._match_safe(shot, "claim_reward.png")
             if claim.found:
                 return self._claim_event_reward(claim)
-            if self.deps.should_stop():
-                return StepResult(False, "stopped by user")
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "return home timeout")
             self.deps.sleep(10)
@@ -743,7 +757,7 @@ class _Session:
 
     # -- cycle -----------------------------------------------------------
 
-    def run_cycle(self, train_attempts: int = 0) -> StepResult:
+    def run_cycle(self, train_attempts: int = 0, crash_attempts: int = 0) -> StepResult:
         if self.deps.should_stop():
             return StepResult(False, "stopped by user")
         result = self.find_attack()
@@ -761,6 +775,8 @@ class _Session:
                 return StepResult(False, "stopped by user")
             result = self.matchmaking()
             if not result.ok:
+                if result.reason == "coc_restarted" and crash_attempts < 3:
+                    return self.run_cycle(train_attempts, crash_attempts + 1)
                 return result
             gate = self._army_gate()
             if not gate.ok:
@@ -793,8 +809,12 @@ class _Session:
 
         result = self.attack()
         if not result.ok:
+            if result.reason == "coc_restarted" and crash_attempts < 3:
+                return self.run_cycle(train_attempts, crash_attempts + 1)
             return result
         result = self.return_home()
+        if not result.ok and result.reason == "coc_restarted" and crash_attempts < 3:
+            return self.run_cycle(train_attempts, crash_attempts + 1)
         if result.ok and self.cfg.wall_upgrade.enabled:
             self._run_wall_upgrade()
         if result.ok:

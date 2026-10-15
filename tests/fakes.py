@@ -11,7 +11,9 @@ class RecordingAdb:
         self.taps = []
         self.swipes = []
         self.shells = []
-        self.shell_fn = lambda command: ""
+        self.shell_fn = lambda command: (
+            "com.supercell.clashofclans" if "ps" in command else ""
+        )
         self.connected = None
 
     def connect(self, addr):
