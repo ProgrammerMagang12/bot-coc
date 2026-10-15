@@ -6,7 +6,7 @@
   "min_elixir": 500000,
   "loot_roi": [0.0413, 0.12, 0.183, 0.176],
   "loot_roi_elixir": [0.041, 0.165, 0.183, 0.222],
-  "on_ocr_fail": "stop",
+  "on_ocr_fail": "next",
   "drop_points": [[0.35, 0.72]],
   "drop_card_point": [0.091, 0.933],
   "drag_deploy_ms": 800,

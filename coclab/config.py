@@ -140,8 +140,8 @@ def load_config(path: str | Path) -> Config:
         raise ConfigError("drop_points: expected a non-empty list of [x, y] pairs")
 
     on_ocr_fail = _require(data, "on_ocr_fail")
-    if on_ocr_fail not in ("stop", "attack"):
-        raise ConfigError("on_ocr_fail: expected 'stop' or 'attack'")
+    if on_ocr_fail not in ("stop", "next", "attack"):
+        raise ConfigError("on_ocr_fail: expected 'stop', 'next' or 'attack'")
 
     card_raw = _require(data, "card_points")
     if not isinstance(card_raw, dict):

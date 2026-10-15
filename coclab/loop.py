@@ -193,16 +193,27 @@ class _Session:
             return None
         return value
 
+    def _read_stable(self, roi: list[float]) -> int | None:
+        value = self._read_verified(roi)
+        if value is None:
+            self.deps.sleep(1.0)
+            logger.info("Loot re-read after unreadable/mismatched OCR")
+            value = self._read_verified(roi)
+        return value
+
     def evaluate_loot(self) -> StepResult:
         self._state(BotState.LOOT_CHECK)
         self.deps.sleep(self.cfg.loot_settle_s)
-        gold = self._read_verified(self.cfg.loot_roi)
+        gold = self._read_stable(self.cfg.loot_roi)
         elixir = (
-            self._read_verified(self.cfg.loot_roi_elixir) if gold is not None else None
+            self._read_stable(self.cfg.loot_roi_elixir) if gold is not None else None
         )
         if gold is None or elixir is None:
             if self.cfg.on_ocr_fail == "stop":
                 return StepResult(False, "OCR unavailable (policy: stop)")
+            if self.cfg.on_ocr_fail == "next":
+                logger.warning("Loot OCR unavailable; skipping base (policy: next)")
+                return StepResult(False, "loot_low")
             logger.warning("OCR unavailable; continuing (policy: attack)")
             return StepResult(True)
         logger.info(

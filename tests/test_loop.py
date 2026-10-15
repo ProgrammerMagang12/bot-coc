@@ -38,18 +38,64 @@ def test_elixir_threshold_enforced():
     assert summary.ok and states.count("MATCHMAKING") == 2
 
 
-def test_loot_double_read_mismatch_is_fail_safe():
-    deps, _ = make_deps(full_script(), [])
-    seq = iter([100, 200])
-    deps.ocr_digits = lambda img, engine=None: next(seq)
+def test_loot_retry_after_bad_read():
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    # gold: mismatch (100 vs 200 → None) lalu retry 999999,999999; elixir 999999,999999
+    loots = iter([100, 200, 999999, 999999, 999999, 999999])
+    deps.ocr_digits = lambda img, engine=None: next(loots)
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+
+
+def test_ocr_fail_policy_next_skips_base(tmp_path):
+    import json
+
+    from coclab.config import load_config as lc
+
+    data = json.loads(EXAMPLE.read_text())
+    data["on_ocr_fail"] = "next"
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+
+    states = []
+    script = full_script(**{"next.png": Match(True, 50, 50, 0.95)})
+    deps, adb = make_deps(script, states)
+    # ronde 1: gold tak terbaca (None×2) → Next; ronde 2: normal → attack
+    loots = iter([None, None, 999999, 999999, 999999, 999999])
+    deps.ocr_digits = lambda img, engine=None: next(loots)
+    summary = run(lc(p), "observe", 1, deps=deps)
+    assert summary.ok and states.count("MATCHMAKING") == 2
+
+
+def test_loot_double_read_mismatch_is_fail_safe(tmp_path):
+    import json
+
+    from coclab.config import load_config as lc
+
+    data = json.loads(EXAMPLE.read_text())
+    data["on_ocr_fail"] = "stop"
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+    deps, _ = make_deps(full_script(), [])
+    seq = iter([100, 200, 100, 200])  # dua percobaan pun mismatch
+    deps.ocr_digits = lambda img, engine=None: next(seq)
+    summary = run(lc(p), "observe", 1, deps=deps)
     assert not summary.ok and "OCR" in summary.reason.upper()
 
 
-def test_ocr_none_stops_by_default():
+def test_ocr_none_with_policy_stop_fails(tmp_path):
+    import json
+
+    from coclab.config import load_config as lc
+
+    data = json.loads(EXAMPLE.read_text())
+    data["on_ocr_fail"] = "stop"
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
     deps, _ = make_deps(full_script(), [])
     deps.ocr_digits = lambda img, engine=None: None
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(lc(p), "observe", 1, deps=deps)
     assert not summary.ok and "OCR" in summary.reason.upper()  # policy stop
 
 

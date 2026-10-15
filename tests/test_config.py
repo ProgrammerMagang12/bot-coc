@@ -14,7 +14,7 @@ def test_example_config_loads():
     assert isinstance(cfg, Config)
     assert cfg.device_address == "127.0.0.1:5555"
     assert 0 < cfg.threshold <= 1
-    assert cfg.on_ocr_fail in ("stop", "attack")
+    assert cfg.on_ocr_fail in ("stop", "next", "attack")
 
 
 def test_missing_file_names_example(tmp_path):
