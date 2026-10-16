@@ -926,6 +926,42 @@ class _Session:
             xp, yp = points[i % len(points)]
             self.actions.tap_percent(*self._jittered(xp, yp))
             self.deps.sleep(self._deploy_delay())
+        # Verifikasi teliti: baca sisa unit di kartu; masih ada sisa -> top-up tap.
+        # (Tap yang mendarat di bangunan/spot invalid tidak men-deploy; loop ini
+        # memastikan SEMUA unit turun sebelum lanjut ke grup berikutnya.)
+        if self.cfg.deploy_verify and detect_key:
+            for _ in range(self.cfg.deploy_max_topups):
+                remaining = self._read_deploy_count(detect_key)
+                if remaining is None or remaining <= 0:
+                    break
+                extra = min(int(remaining), 15)
+                logger.info(
+                    "Deploy %s: sisa %d di kartu - top-up %d tap",
+                    card_key,
+                    remaining,
+                    extra,
+                )
+                for _ in range(extra):
+                    xp, yp = points[taps % len(points)]
+                    taps += 1
+                    self.actions.tap_percent(*self._jittered(xp, yp))
+                    self.deps.sleep(self._deploy_delay())
+
+    def _read_deploy_count(self, detect_key: str) -> int | None:
+        """Baca sisa unit di badge kartu saat battle; None bila tak terbaca."""
+        hit = self._deck_cards.get(detect_key)
+        if hit is None:
+            return None
+        shot = self._capture("deploy_count.png")
+        if shot is None:
+            return None
+        try:
+            img = self._img(shot)
+            x1, y1, x2, y2 = cards.count_roi(hit[0], hit[1])
+            return self.deps.read_badge(img[y1:y2, x1:x2])
+        except Exception as exc:  # noqa: BLE001 - verifikasi tak boleh mematikan deploy
+            logger.info("Baca sisa kartu %s gagal: %s", detect_key, exc)
+            return None
 
     def _drop_heroes(self, chosen) -> None:
         if not chosen.hero_positions:
@@ -944,8 +980,11 @@ class _Session:
             self.actions.tap_percent(*card)
             logger.info("Deploy hero %d", i + 1)
             self.deps.sleep(0.4)
-            self.actions.tap_percent(*self._jittered(xp, yp))
-            self.deps.sleep(self._deploy_delay())
+            # Dua tap map: bila tap pertama kena bangunan/spot invalid, tap kedua
+            # menempatkan hero; bila hero sudah turun, tap kedua tidak berdampak.
+            for _ in range(2):
+                self.actions.tap_percent(*self._jittered(xp, yp))
+                self.deps.sleep(self._deploy_delay())
 
     def attack(self) -> StepResult:
         self._state(BotState.ATTACK)

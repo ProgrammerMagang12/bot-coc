@@ -85,6 +85,8 @@ class Config:
     deploy_jitter_px: int
     mirror_strategies: bool
     tap_delay_jitter_pct: int
+    deploy_verify: bool
+    deploy_max_topups: int
     another_device_wait_s: int
     connection_lost_point: list[float] | None
     zoom_out_enabled: bool
@@ -356,6 +358,15 @@ def load_config(path: str | Path) -> Config:
     if not isinstance(pct_raw, int) or isinstance(pct_raw, bool) or not 0 <= pct_raw <= 90:
         raise ConfigError("tap_delay_jitter_pct: expected an integer between 0 and 90")
     tap_delay_jitter_pct = int(pct_raw)
+    deploy_verify = _bool(data.get("deploy_verify", True), "deploy_verify")
+    topups_raw = data.get("deploy_max_topups", 2)
+    if (
+        not isinstance(topups_raw, int)
+        or isinstance(topups_raw, bool)
+        or not 0 <= topups_raw <= 5
+    ):
+        raise ConfigError("deploy_max_topups: expected an integer between 0 and 5")
+    deploy_max_topups = int(topups_raw)
     another_device_wait_s = _positive_int(
         data.get("another_device_wait_s", 30), "another_device_wait_s"
     )
@@ -438,6 +449,8 @@ def load_config(path: str | Path) -> Config:
         deploy_jitter_px=deploy_jitter_px,
         mirror_strategies=mirror_strategies,
         tap_delay_jitter_pct=tap_delay_jitter_pct,
+        deploy_verify=deploy_verify,
+        deploy_max_topups=deploy_max_topups,
         another_device_wait_s=another_device_wait_s,
         connection_lost_point=connection_lost_point,
         zoom_out_enabled=zoom_out_enabled,
