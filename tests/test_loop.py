@@ -1297,3 +1297,19 @@ def test_find_attack_recovers_from_menu():
     summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
     assert not summary.ok and "timeout" in summary.reason.lower()
     assert any("keyevent 4" in c for c in adb.shells)
+
+
+def test_matchmaking_recovers_when_left_on_home():
+    """Menu telat muncul & bot terlempar ke home: matchmaking klik Battle lagi (tanpa BACK)."""
+    script = full_script()
+    del script["find_match.png"]  # menu tidak pernah terdeteksi
+    del script["next.png"]  # dan lawan tak pernah ketemu → alur harus timeout bersih
+    states = []
+    deps, adb = make_deps(script, states)
+    t = [-10]
+    deps.monotonic = lambda: t.__setitem__(0, t[0] + 10) or t[0]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "timeout" in summary.reason.lower()
+    # klik Battle minimal 2x: klik awal (find_attack) + klik pemulihan (matchmaking)
+    assert adb.taps.count((1, 1)) >= 2
+    assert not any("keyevent 4" in c for c in adb.shells)

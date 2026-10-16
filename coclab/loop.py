@@ -673,6 +673,7 @@ class _Session:
         self._state(BotState.MATCHMAKING)
         deadline = self.deps.monotonic() + self.cfg.search_timeout_s
         clicked = False
+        home_clicks = 0
         while True:
             self._pause_gate()
             if self.deps.should_stop():
@@ -699,6 +700,12 @@ class _Session:
                             self.deps.sleep(1.0)
                     clicked = True
                     continue
+                home_match = self._home_attack_match(shot)
+                if home_match.found and home_clicks < 2:
+                    home_clicks += 1
+                    logger.info("Di home (bukan menu) - klik Battle lagi (%d)", home_clicks)
+                    self.actions.tap_px(home_match.cx, home_match.cy)
+                    self.deps.sleep(3.0)
             if self._match_safe(shot, "next.png").found:
                 logger.info("Opponent found (Next button visible)")
                 return StepResult(True)
@@ -1165,12 +1172,10 @@ class _Session:
         self.deps.sleep(1.0)
         menu_ok = self._waits_for_menu()
         if not menu_ok:
+            # JANGAN tekan BACK di sini: menu bisa hanya lambat muncul, dan BACK
+            # justru menutup panel serangan → bot mentok di home. matchmaking()
+            # akan memulihkan sendiri (klik Battle lagi bila di home).
             logger.warning("Menu multiplayer tidak terdeteksi - builder dilewati")
-            try:
-                self.deps.adb.shell(self.device, "input keyevent 4")
-            except Exception:  # noqa: BLE001
-                pass
-            self.deps.sleep(1.5)
         if menu_ok and (
             self.cfg.train_mode == "quick_train"
             and self.cfg.train_ui.get("recipe_tab") is not None
