@@ -1315,10 +1315,17 @@ def test_matchmaking_recovers_when_left_on_home():
     assert not any("keyevent 4" in c for c in adb.shells)
 
 
-def test_deploy_topup_fills_remaining_units(monkeypatch):
+def test_deploy_topup_fills_remaining_units(monkeypatch, tmp_path):
     """Sisa unit terbaca di kartu -> top-up tap sampai habis (tidak lebih)."""
+    import json
+
     from coclab import loop as loop_mod
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["mirror_strategies"] = False  # posisi deterministik
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     hits = {
         "dragon": (291, 815, 0.9),
@@ -1345,16 +1352,23 @@ def test_deploy_topup_fills_remaining_units(monkeypatch):
     states = []
     deps, adb = make_deps(full_script(), states)
     deps.load_strategies = lambda path: [strategy]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     # titik dragon dipakai dragon(13) + top-up(2) + extra_troop di EXAMPLE(2) = 17
     n = sum(1 for tx, ty in adb.taps if abs(tx - 800) <= 40 and abs(ty - 450) <= 27)
     assert n == 17
 
 
-def test_hero_double_tap_map_safety():
+def test_hero_double_tap_map_safety(tmp_path):
     """Tiap hero: dua tap map (jaring keselamatan bila tap pertama kena bangunan)."""
+    import json
+
     from coclab.strategy import Strategy
+
+    data = json.loads(EXAMPLE.read_text())
+    data["mirror_strategies"] = False  # posisi deterministik (tanpa pilihan cermin)
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
 
     strategy = Strategy(
         name="t",
@@ -1368,7 +1382,7 @@ def test_hero_double_tap_map_safety():
     states = []
     deps, adb = make_deps(full_script(), states)
     deps.load_strategies = lambda path: [strategy]
-    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    summary = run(load_config(p), "observe", 1, deps=deps)
     assert summary.ok
     # deteksi kosong di fake -> fallback cfg.hero_cards = 2 hero x 2 tap map
     n = sum(1 for tx, ty in adb.taps if abs(tx - 960) <= 40 and abs(ty - 450) <= 27)
