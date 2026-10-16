@@ -37,6 +37,8 @@
   "deploy_jitter_px": 38,
   "mirror_strategies": true,
   "tap_delay_jitter_pct": 30,
+  "deploy_verify": true,
+  "deploy_max_topups": 2,
   "another_device_wait_s": 30,
   "connection_lost_point": null,
   "zoom_out_enabled": true,

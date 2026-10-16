@@ -1313,3 +1313,63 @@ def test_matchmaking_recovers_when_left_on_home():
     # klik Battle minimal 2x: klik awal (find_attack) + klik pemulihan (matchmaking)
     assert adb.taps.count((1, 1)) >= 2
     assert not any("keyevent 4" in c for c in adb.shells)
+
+
+def test_deploy_topup_fills_remaining_units(monkeypatch):
+    """Sisa unit terbaca di kartu -> top-up tap sampai habis (tidak lebih)."""
+    from coclab import loop as loop_mod
+    from coclab.strategy import Strategy
+
+    hits = {
+        "dragon": (291, 815, 0.9),
+        "balloon": (170, 815, 0.9),
+        "rage": (1180, 815, 0.9),
+        "freeze": (1301, 815, 0.9),
+    }
+    monkeypatch.setattr(loop_mod.cards, "detect_cards", lambda img, tpl, **kw: dict(hits))
+    seq = iter([2, 0])  # dragon: sisa 2, lalu habis
+
+    def fake_count(self, detect_key):
+        return next(seq, 0) if detect_key == "dragon" else 0
+
+    monkeypatch.setattr(loop_mod._Session, "_read_deploy_count", fake_count)
+    strategy = Strategy(
+        name="t",
+        dragon_drops=[[0.5, 0.5]],
+        balloon_drops=[[0.55, 0.5]],
+        wall_wrecker_drop=[0.3, 0.55],
+        hero_positions=[[0.6, 0.5]],
+        rage_spell_positions=[[0.7, 0.5]],
+        freeze_spell_positions=[[0.8, 0.5]],
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.load_strategies = lambda path: [strategy]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    # titik dragon dipakai dragon(13) + top-up(2) + extra_troop di EXAMPLE(2) = 17
+    n = sum(1 for tx, ty in adb.taps if abs(tx - 800) <= 40 and abs(ty - 450) <= 27)
+    assert n == 17
+
+
+def test_hero_double_tap_map_safety():
+    """Tiap hero: dua tap map (jaring keselamatan bila tap pertama kena bangunan)."""
+    from coclab.strategy import Strategy
+
+    strategy = Strategy(
+        name="t",
+        dragon_drops=[[0.5, 0.5]],
+        balloon_drops=[],
+        wall_wrecker_drop=None,
+        hero_positions=[[0.6, 0.5]],
+        rage_spell_positions=[],
+        freeze_spell_positions=[],
+    )
+    states = []
+    deps, adb = make_deps(full_script(), states)
+    deps.load_strategies = lambda path: [strategy]
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert summary.ok
+    # deteksi kosong di fake -> fallback cfg.hero_cards = 2 hero x 2 tap map
+    n = sum(1 for tx, ty in adb.taps if abs(tx - 960) <= 40 and abs(ty - 450) <= 27)
+    assert n == 4
