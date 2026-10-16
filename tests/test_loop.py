@@ -1220,3 +1220,66 @@ def test_pause_gate_blocks_taps_until_resume():
         load_config(EXAMPLE), "observe", 1, deps=deps, is_paused=lambda: paused["v"]
     )
     assert summary.ok and polls["n"] >= 3
+
+
+def test_dragon_badge_uses_detected_position():
+    """Badge dragon dibaca dari kartu hasil deteksi; ROI tetap hanya fallback."""
+    import numpy as np
+    from coclab import vision
+    from coclab.loop import _Session
+
+    deps, _ = make_deps(full_script(), [])
+    cfg = load_config(EXAMPLE)
+    session = _Session(cfg, "observe", deps)
+    session.deps.crop_percent = lambda im, *roi: vision.crop_percent(im, *roi)
+    img = np.zeros((900, 1600, 3), np.uint8)
+    shapes = []
+    session.deps.read_badge = lambda crop: shapes.append(crop.shape) or 12
+
+    val = session._dragon_badge_count(img, {"dragon": (291, 815, 0.9)})
+    assert val == 12 and shapes and shapes[0][:2] == (30, 72)
+
+    shapes.clear()
+    val2 = session._dragon_badge_count(img, {})
+    assert val2 == 12 and shapes and shapes[0][:2] == (54, 112)
+
+
+def test_recover_rebuilds_then_rechecks_at_new_scout(monkeypatch, tmp_path):
+    """Gate gagal → rebuild di menu → matchmaking lagi → gate dicek di scout BARU."""
+    import json
+    from coclab import loop as loop_mod
+
+    data = json.loads(EXAMPLE.read_text())
+    data["train_ui"] = {
+        "army_button": [0.1125, 0.9478],
+        "recipe_tab": [0.5, 0.1022],
+        "recipe_use": [0.9338, 0.2589],
+        "recipe_confirm": [0.6113, 0.6467],
+        "close_button": [0.965, 0.0911],
+    }
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(data))
+
+    good = {
+        "dragon": (291, 815, 0.9),
+        "balloon": (170, 815, 0.9),
+        "rage": (1180, 815, 0.9),
+        "freeze": (1301, 815, 0.9),
+    }
+    seq = [dict(), dict(good)]
+
+    def fake_detect(img, tpl_dir, **kw):
+        return seq.pop(0) if seq else dict(good)
+
+    monkeypatch.setattr(loop_mod.cards, "detect_cards", fake_detect)
+    script = full_script()
+    del script["dragon_card.png"]  # legacy fallback harus GAGAL di scout pertama
+    del script["balloon_card.png"]
+    states = []
+    deps, adb = make_deps(script, states)
+    summary = run(load_config(p), "observe", 1, deps=deps)
+    assert summary.ok and "ATTACK" in states
+    assert (104, 675) in adb.taps  # end battle saat gate pertama gagal
+    # builder rutin per-siklus + builder RECOVER setelah end battle gate
+    last_builder = len(adb.taps) - 1 - adb.taps[::-1].index((180, 853))
+    assert last_builder > adb.taps.index((104, 675))

@@ -396,8 +396,7 @@ class _Session:
                         match.score,
                     )
                     return False
-        crop = self.deps.crop_percent(img, *self.cfg.army_badge_roi)
-        value = self.deps.read_badge(crop)
+        value = self._dragon_badge_count(img, detected)
         expected = int(self.cfg.army.get("dragon_drops", 0))
         if value is None:
             logger.info("Jumlah tak terbaca, tapi kartu sudah sesuai - lanjut")
@@ -406,6 +405,23 @@ class _Session:
         if expected > 0:
             return value >= expected
         return value >= 2
+
+    def _dragon_badge_count(self, img, detected: dict) -> int | None:
+        """Jumlah dragon dari badge KARTU YANG TERDETEKSI (akurat lintas akun).
+
+        Akun dengan urutan kartu berbeda (balloon di slot 1, dst.) salah ter-baca
+        oleh ROI tetap army_badge_roi — karena itu baca dari posisi dragon hasil
+        deteksi; ROI tetap hanya dipakai sebagai fallback.
+        """
+        hit = detected.get("dragon") if detected else None
+        if hit is not None:
+            try:
+                x1, y1, x2, y2 = cards.count_roi(hit[0], hit[1])
+                return self.deps.read_badge(img[y1:y2, x1:x2])
+            except Exception as exc:  # noqa: BLE001 - jatuh ke ROI tetap
+                logger.info("Badge dragon (deteksi) gagal dibaca: %s", exc)
+        crop = self.deps.crop_percent(img, *self.cfg.army_badge_roi)
+        return self.deps.read_badge(crop)
 
     def _log_card_counts(self, img, detected: dict) -> None:
         """Catat jumlah pasukan/spell dari badge kartu (info saja, best-effort)."""
@@ -433,30 +449,21 @@ class _Session:
         return StepResult(False, "army_mismatch")
 
     def _recover_army(self, gate: StepResult) -> StepResult:
-        """Perbaiki deck langsung dari layar scout: Deck Builder presisi atau recipe."""
+        """Muat ulang deck dari menu; pemanggil mencari lawan baru utk cek ulang.
+
+        Gate ulang TIDAK dilakukan di sini: setelah deck dibangun di layar menu,
+        deck tidak terlihat — pemanggil harus matchmaking lagi agar cek deck
+        terjadi di layar scout (lihat run_cycle).
+        """
+        self._pause_gate()
+        if self.deps.should_stop():
+            return StepResult(False, "stopped by user")
         ui_ready = bool(self.cfg.train_ui and "army_button" in self.cfg.train_ui)
-        has_clear = (
-            any(
-                self.cfg.train_ui.get(key) is not None
-                for key in ("clear_troops", "clear_spells", "clear_siege")
-            )
-            if ui_ready
-            else False
-        )
-        rounds = 2 if has_clear else 1
-        for _ in range(rounds):
-            self._pause_gate()
-            if self.deps.should_stop():
-                return StepResult(False, "stopped by user")
-            if ui_ready and self._build_army():
-                gate = self._army_gate()
-                if gate.ok:
-                    logger.info("Deck presisi siap - lanjut serang")
-                    return gate
-                continue
-            if self.cfg.train_points and self._train_army():
-                return self._army_gate()
-            return gate
+        if ui_ready and self._build_army():
+            logger.info("Deck Builder: pasukan dimuat ulang - cari lawan baru utk cek ulang")
+            return StepResult(True)
+        if self.cfg.train_points and self._train_army():
+            return StepResult(True)
         return gate
 
     PANEL_CAP_ROI = [0.42, 0.208, 0.515, 0.248]
@@ -1187,6 +1194,7 @@ class _Session:
                 gate = self._recover_army(gate)
                 if not gate.ok:
                     return gate
+                continue  # rebuild sukses: matchmaking lagi, cek deck di scout baru
             result = self.evaluate_loot()
             if result.ok:
                 break
