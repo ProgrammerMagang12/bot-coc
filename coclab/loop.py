@@ -657,6 +657,13 @@ class _Session:
                 self._launch_coc()
                 deadline = self.deps.monotonic() + max(self.cfg.find_attack_timeout_s, 120)
                 continue
+            if self._match_safe(shot, "find_match.png").found:
+                logger.info("Layar menu (bukan home) terdeteksi - tekan BACK ke home")
+                try:
+                    self.deps.adb.shell(self.device, "input keyevent 4")
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("BACK gagal: %s", exc)
+                self.deps.sleep(2)
             if self.deps.monotonic() > deadline:
                 return StepResult(False, "attack button not found (timeout)")
             logger.info("Attack button not visible yet; waiting...")

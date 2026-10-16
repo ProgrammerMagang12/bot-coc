@@ -1283,3 +1283,17 @@ def test_recover_rebuilds_then_rechecks_at_new_scout(monkeypatch, tmp_path):
     # builder rutin per-siklus + builder RECOVER setelah end battle gate
     last_builder = len(adb.taps) - 1 - adb.taps[::-1].index((180, 853))
     assert last_builder > adb.taps.index((104, 675))
+
+
+def test_find_attack_recovers_from_menu():
+    """Bot dimulai saat game tertinggal di меню: find_attack tekan BACK ke home."""
+    script = full_script()
+    del script["attack.png"]
+    del script["returnhome.png"]  # sweep dialog tidak boleh mencegat jalur ini
+    states = []
+    deps, adb = make_deps(script, states)
+    t = [-10]
+    deps.monotonic = lambda: t.__setitem__(0, t[0] + 10) or t[0]  # +10s tiap panggilan
+    summary = run(load_config(EXAMPLE), "observe", 1, deps=deps)
+    assert not summary.ok and "timeout" in summary.reason.lower()
+    assert any("keyevent 4" in c for c in adb.shells)
